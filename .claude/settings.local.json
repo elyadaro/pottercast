@@ -5,7 +5,9 @@
       "Bash(npx tailwindcss init:*)",
       "Bash(npm uninstall:*)",
       "Bash(git config:*)",
-      "Bash(git credential-manager:*)"
+      "Bash(git credential-manager:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
