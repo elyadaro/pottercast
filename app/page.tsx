@@ -37,7 +37,7 @@ export default function VotingPage() {
     const { data: profile } = await supabase
       .from('profiles')
       .select('full_name')
-      .eq('id', user.id)
+      .eq('id', user!.id)
       .single()
 
     if (profile && profile.full_name) {
@@ -65,7 +65,7 @@ export default function VotingPage() {
       const { data: voteData } = await supabase
         .from('votes')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .single()
 
       if (voteData) {
@@ -90,7 +90,7 @@ export default function VotingPage() {
     const { error } = await supabase
       .from('profiles')
       .update({ full_name: fullName })
-      .eq('id', user.id)
+      .eq('id', user!.id)
 
     if (!error) {
       setShowNameInput(false)
@@ -145,7 +145,7 @@ export default function VotingPage() {
       ({ error } = await supabase
         .from('votes')
         .insert({
-          user_id: user.id,
+          user_id: user!.id,
           predictions: numericPredictions,
           client_timestamp: clientTimestamp
         }))
