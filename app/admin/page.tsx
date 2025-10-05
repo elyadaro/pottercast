@@ -17,15 +17,21 @@ type Result = {
 
 type Vote = {
   id: string
-  user_name: string
-  user_email: string | null
+  user_id: string
   predictions: Record<string, number>
   client_timestamp: string
+}
+
+type Profile = {
+  id: string
+  full_name: string
 }
 
 export default function AdminPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [results, setResults] = useState<Record<string, string>>({})
+  const [votes, setVotes] = useState<Vote[]>([])
+  const [profiles, setProfiles] = useState<Record<string, string>>({})
   const [winner, setWinner] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -60,6 +66,27 @@ export default function AdminPage() {
       }
 
       setResults(initialResults)
+    }
+
+    // Load all votes
+    const { data: votesData } = await supabase
+      .from('votes')
+      .select('*')
+      .order('client_timestamp')
+
+    if (votesData) {
+      setVotes(votesData)
+    }
+
+    // Load all profiles
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+
+    if (profilesData) {
+      const profilesMap: Record<string, string> = {}
+      profilesData.forEach(p => profilesMap[p.id] = p.full_name)
+      setProfiles(profilesMap)
     }
 
     setLoading(false)
@@ -142,18 +169,18 @@ export default function AdminPage() {
     })
 
     // Get all votes ordered by client_timestamp
-    const { data: votes } = await supabase
+    const { data: votesData } = await supabase
       .from('votes')
       .select('*')
       .order('client_timestamp', { ascending: true })
 
-    if (!votes || votes.length === 0) {
+    if (!votesData || votesData.length === 0) {
       alert('אין הצבעות במערכת')
       return
     }
 
     // Find first exact match
-    for (const vote of votes as Vote[]) {
+    for (const vote of votesData as Vote[]) {
       let isExactMatch = true
 
       for (const [candidateName, actualScore] of Object.entries(targetPredictions)) {
@@ -164,9 +191,10 @@ export default function AdminPage() {
       }
 
       if (isExactMatch) {
-        const winnerName = vote.user_email || vote.user_name
+        // Get user name from profiles
+        const userName = profiles[vote.user_id] || 'לא ידוע'
         const timestamp = new Date(vote.client_timestamp).toLocaleString('he-IL')
-        setWinner(`🏆 הזוכה: ${winnerName}\nזמן הצבעה: ${timestamp}`)
+        setWinner(`🏆 הזוכה: ${userName}\nזמן הצבעה: ${timestamp}`)
         return
       }
     }
@@ -241,6 +269,35 @@ export default function AdminPage() {
           >
             שמור תוצאות
           </button>
+        </div>
+
+        {/* All Votes */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-4 text-gray-700">כל ההצבעות</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שם משתמש</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">זמן הצבעה</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ניחושים</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {votes.map((vote) => (
+                  <tr key={vote.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{profiles[vote.user_id] || 'לא ידוע'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(vote.client_timestamp).toLocaleString('he-IL')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {JSON.stringify(vote.predictions)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Find Winner */}
