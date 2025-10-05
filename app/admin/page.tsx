@@ -17,17 +17,27 @@ type Result = {
 
 type Vote = {
   id: string
-  user_name: string
-  user_email: string | null
+  user_id: string
   predictions: Record<string, number>
   client_timestamp: string
+  updated_at: string
+  user?: {
+    first_name: string
+    last_name: string
+    phone: string | null
+  }
+  auth_user?: {
+    email: string | null
+  }
 }
 
 export default function AdminPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [results, setResults] = useState<Record<string, string>>({})
+  const [votes, setVotes] = useState<Vote[]>([])
   const [winner, setWinner] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showVotes, setShowVotes] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -122,6 +132,33 @@ export default function AdminPage() {
     alert('התוצאות נשמרו בהצלחה!')
   }
 
+  async function loadAllVotes() {
+    // Load all votes with user details
+    const { data: votesData, error } = await supabase
+      .from('votes')
+      .select(`
+        *,
+        users:user_id (
+          first_name,
+          last_name,
+          phone
+        )
+      `)
+      .order('client_timestamp', { ascending: true })
+
+    if (error) {
+      console.error('Error loading votes:', error)
+      return
+    }
+
+    if (votesData) {
+      // We need to get emails separately from auth.users
+      // For now, we'll store the votes and handle emails client-side
+      setVotes(votesData as any)
+      setShowVotes(true)
+    }
+  }
+
   async function findWinner() {
     // Get all results
     const { data: resultsData } = await supabase
@@ -141,19 +178,26 @@ export default function AdminPage() {
       }
     })
 
-    // Get all votes ordered by client_timestamp
-    const { data: votes } = await supabase
+    // Get all votes ordered by client_timestamp with user details
+    const { data: votesData } = await supabase
       .from('votes')
-      .select('*')
+      .select(`
+        *,
+        users:user_id (
+          first_name,
+          last_name,
+          phone
+        )
+      `)
       .order('client_timestamp', { ascending: true })
 
-    if (!votes || votes.length === 0) {
+    if (!votesData || votesData.length === 0) {
       alert('אין הצבעות במערכת')
       return
     }
 
     // Find first exact match
-    for (const vote of votes as Vote[]) {
+    for (const vote of votesData as any[]) {
       let isExactMatch = true
 
       for (const [candidateName, actualScore] of Object.entries(targetPredictions)) {
@@ -164,9 +208,12 @@ export default function AdminPage() {
       }
 
       if (isExactMatch) {
-        const winnerName = vote.user_email || vote.user_name
+        const userName = vote.users
+          ? `${vote.users.first_name} ${vote.users.last_name}`
+          : 'משתמש לא ידוע'
+        const contactInfo = vote.users?.phone || vote.users?.email || 'אין מידע'
         const timestamp = new Date(vote.client_timestamp).toLocaleString('he-IL')
-        setWinner(`🏆 הזוכה: ${winnerName}\nזמן הצבעה: ${timestamp}`)
+        setWinner(`🏆 הזוכה: ${userName}\nפרטי קשר: ${contactInfo}\nזמן הצבעה: ${timestamp}`)
         return
       }
     }
@@ -257,6 +304,68 @@ export default function AdminPage() {
               <pre className="text-xl font-bold text-gray-800 whitespace-pre-wrap">
                 {winner}
               </pre>
+            </div>
+          )}
+        </div>
+
+        {/* View All Votes */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-700">כל ההצבעות</h2>
+          <button
+            onClick={loadAllVotes}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg text-lg font-bold hover:bg-blue-700 transition mb-4"
+          >
+            {showVotes ? 'רענן רשימה' : 'הצג כל ההצבעות'}
+          </button>
+
+          {showVotes && votes.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-100 border-b-2 border-gray-300">
+                    <th className="p-2 text-right">שם</th>
+                    <th className="p-2 text-right">פרטי קשר</th>
+                    <th className="p-2 text-right">זמן</th>
+                    <th className="p-2 text-right">ניחושים</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {votes.map((vote) => (
+                    <tr key={vote.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="p-2">
+                        {vote.user
+                          ? `${vote.user.first_name} ${vote.user.last_name}`
+                          : 'לא ידוע'}
+                      </td>
+                      <td className="p-2 text-xs">
+                        {vote.user?.phone || 'אין מידע'}
+                      </td>
+                      <td className="p-2 text-xs">
+                        {new Date(vote.client_timestamp).toLocaleString('he-IL')}
+                        {vote.updated_at !== vote.client_timestamp && (
+                          <div className="text-orange-600">
+                            עודכן: {new Date(vote.updated_at).toLocaleString('he-IL')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-2 text-xs">
+                        {Object.entries(vote.predictions)
+                          .map(([name, score]) => `${name}: ${score}`)
+                          .join(', ')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-4 text-sm text-gray-600">
+                סה"כ {votes.length} הצבעות
+              </div>
+            </div>
+          )}
+
+          {showVotes && votes.length === 0 && (
+            <div className="text-center text-gray-500 py-4">
+              אין הצבעות במערכת
             </div>
           )}
         </div>

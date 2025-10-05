@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { getCurrentUser, getUserVote, signOut } from '@/lib/auth'
+import AuthModal from '@/components/AuthModal'
 
 type Candidate = {
   id: string
@@ -10,32 +12,67 @@ type Candidate = {
   display_order: number
 }
 
+type User = {
+  id: string
+  email?: string
+} | null
+
 export default function VotingPage() {
   const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [predictions, setPredictions] = useState<Record<string, string>>({})
   const [clientTimestamp, setClientTimestamp] = useState('')
-  const [userName, setUserName] = useState('')
-  const [showNameInput, setShowNameInput] = useState(false)
+  const [user, setUser] = useState<User>(null)
+  const [existingVote, setExistingVote] = useState<any>(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
   const supabase = createClient()
 
+  async function handleLogout() {
+    await signOut()
+    localStorage.removeItem('is_admin')
+    setUser(null)
+    setExistingVote(null)
+    setIsEditMode(false)
+    router.refresh()
+  }
+
   useEffect(() => {
-    loadCandidates()
+    loadData()
   }, [])
 
-  async function loadCandidates() {
-    const { data, error } = await supabase
+  async function loadData() {
+    // Check if user is logged in
+    const currentUser = await getCurrentUser()
+    setUser(currentUser)
+
+    // Load candidates
+    const { data: candidatesData } = await supabase
       .from('candidates')
       .select('id, name, display_order')
       .eq('is_active', true)
       .order('display_order')
 
-    if (data) {
-      setCandidates(data)
+    if (candidatesData) {
+      setCandidates(candidatesData)
       const initialPredictions: Record<string, string> = {}
-      data.forEach(c => initialPredictions[c.name] = '')
+      candidatesData.forEach(c => initialPredictions[c.name] = '')
+
+      // If user is logged in, check for existing vote
+      if (currentUser) {
+        const vote = await getUserVote(currentUser.id)
+        if (vote) {
+          setExistingVote(vote)
+          setIsEditMode(true)
+          // Load existing predictions
+          Object.entries(vote.predictions as Record<string, number>).forEach(([name, value]) => {
+            initialPredictions[name] = value.toString()
+          })
+        }
+      }
+
       setPredictions(initialPredictions)
     }
     setLoading(false)
@@ -63,16 +100,19 @@ export default function VotingPage() {
       return
     }
 
+    // Save timestamp BEFORE showing auth
     setClientTimestamp(new Date().toISOString())
-    setShowNameInput(true)
+
+    // If user is already logged in, submit directly
+    if (user) {
+      await submitVote(user.id)
+    } else {
+      // Show auth modal
+      setShowAuthModal(true)
+    }
   }
 
-  async function submitVote() {
-    if (!userName.trim()) {
-      alert('נא להזין שם מלא')
-      return
-    }
-
+  async function submitVote(userId: string) {
     setSubmitting(true)
 
     // Convert predictions to numbers
@@ -81,13 +121,28 @@ export default function VotingPage() {
       numericPredictions[name] = parseFloat(value)
     })
 
-    const { error } = await supabase
-      .from('votes')
-      .insert({
-        user_name: userName,
-        predictions: numericPredictions,
-        client_timestamp: clientTimestamp
-      })
+    const voteData = {
+      user_id: userId,
+      predictions: numericPredictions,
+      client_timestamp: clientTimestamp || new Date().toISOString()
+    }
+
+    let error
+
+    if (isEditMode && existingVote) {
+      // Update existing vote
+      const result = await supabase
+        .from('votes')
+        .update(voteData)
+        .eq('user_id', userId)
+      error = result.error
+    } else {
+      // Insert new vote
+      const result = await supabase
+        .from('votes')
+        .insert(voteData)
+      error = result.error
+    }
 
     setSubmitting(false)
 
@@ -95,15 +150,19 @@ export default function VotingPage() {
       alert('שגיאה בשמירת ההצבעה')
       console.error(error)
     } else {
-      alert('ההצבעה נשמרה בהצלחה!')
-      // Reset form
-      setPredictions(prev => {
-        const reset: Record<string, string> = {}
-        candidates.forEach(c => reset[c.name] = '')
-        return reset
-      })
-      setUserName('')
-      setShowNameInput(false)
+      alert(isEditMode ? 'הניחוש עודכן בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
+      // Reload to get updated vote
+      await loadData()
+    }
+  }
+
+  async function handleAuthSuccess() {
+    setShowAuthModal(false)
+    // Get the newly logged in user
+    const currentUser = await getCurrentUser()
+    if (currentUser) {
+      setUser(currentUser)
+      await submitVote(currentUser.id)
     }
   }
 
@@ -115,42 +174,6 @@ export default function VotingPage() {
     )
   }
 
-  if (showNameInput) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-          <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
-            נא להזין את שמך המלא
-          </h2>
-          <input
-            type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-purple-200 rounded-lg focus:outline-none focus:border-purple-500 mb-6 text-center text-lg"
-            placeholder="שם מלא"
-            disabled={submitting}
-          />
-          <div className="flex gap-3">
-            <button
-              onClick={submitVote}
-              disabled={submitting}
-              className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 transition"
-            >
-              {submitting ? 'שולח...' : 'שלח הצבעה'}
-            </button>
-            <button
-              onClick={() => setShowNameInput(false)}
-              disabled={submitting}
-              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition"
-            >
-              חזור
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4">
       <div className="max-w-2xl mx-auto">
@@ -158,9 +181,30 @@ export default function VotingPage() {
           <h1 className="text-4xl font-bold text-center mb-2 text-gray-800">
             ניחושי מדד הפוטריות
           </h1>
-          <p className="text-center text-gray-600 mb-8">
+          <p className="text-center text-gray-600 mb-4">
             נחש את הציון שכל מועמד ייתן (1-10.5)
           </p>
+
+          {user && (
+            <div className="text-center mb-4">
+              <div className="flex justify-center items-center gap-3">
+                <span className="text-sm text-gray-500">
+                  מחובר כ: {user.email}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="text-sm text-red-600 hover:text-red-700 underline"
+                >
+                  התנתק
+                </button>
+              </div>
+              {isEditMode && (
+                <span className="block text-sm text-green-600 font-semibold">
+                  מצב עריכה - ניתן לשנות את הניחוש
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="space-y-4 mb-8">
             {candidates.map((candidate) => (
@@ -182,12 +226,21 @@ export default function VotingPage() {
 
           <button
             onClick={handleSubmit}
-            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 transition shadow-lg"
+            disabled={submitting}
+            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 disabled:bg-gray-400 transition shadow-lg"
           >
-            שלח
+            {submitting ? 'שולח...' : (isEditMode ? 'עדכן ניחוש' : 'שלח')}
           </button>
         </div>
       </div>
+
+      {showAuthModal && (
+        <AuthModal
+          onSuccess={handleAuthSuccess}
+          onCancel={() => setShowAuthModal(false)}
+          showAlreadyVotedOption={!user}
+        />
+      )}
     </div>
   )
 }

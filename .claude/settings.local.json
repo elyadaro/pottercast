@@ -5,7 +5,11 @@
       "Bash(npx tailwindcss init:*)",
       "Bash(npm uninstall:*)",
       "Bash(git config:*)",
-      "Bash(git credential-manager:*)"
+      "Bash(git credential-manager:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd user authentication system with Google, Email, and Phone support\n\n- Add users table with support for multiple auth providers (Google/Email/Phone)\n- Update votes table to link to authenticated users via user_id\n- Implement full authentication flow with 3 sign-in methods:\n  * Google OAuth\n  * Email (Magic Link - passwordless)\n  * Phone (SMS OTP)\n- Require full name (first and last) during registration\n- Add user profile management\n- Enable vote editing (timestamp updates on edit)\n- Add comprehensive admin dashboard with:\n  * View all votes with user details\n  * User contact information display\n  * Winner detection with full contact info\n- Implement Row Level Security (RLS) policies\n- Add middleware for route protection and admin access control\n- Create AuthGuard component for client-side authentication\n- Add auto-updating timestamp trigger for vote edits\n- Include complete setup instructions\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
