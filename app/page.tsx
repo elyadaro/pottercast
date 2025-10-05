@@ -14,6 +14,7 @@ export default function VotingPage() {
   const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [predictions, setPredictions] = useState<Record<string, string>>({})
+  const [clientTimestamp, setClientTimestamp] = useState('')
   const [userName, setUserName] = useState('')
   const [showNameInput, setShowNameInput] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -62,6 +63,7 @@ export default function VotingPage() {
       return
     }
 
+    setClientTimestamp(new Date().toISOString())
     setShowNameInput(true)
   }
 
@@ -72,7 +74,6 @@ export default function VotingPage() {
     }
 
     setSubmitting(true)
-    const clientTimestamp = new Date().toISOString()
 
     // Convert predictions to numbers
     const numericPredictions: Record<string, number> = {}
