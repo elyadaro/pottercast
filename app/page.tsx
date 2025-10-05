@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useSupabaseAuth } from '@/lib/auth'  // Assuming you have a custom auth hook or context
 
 type Candidate = {
   id: string
@@ -12,33 +13,89 @@ type Candidate = {
 
 export default function VotingPage() {
   const router = useRouter()
+  const { user, signInWithGoogle, signInWithEmail, signInWithPhone, signOut } = useSupabaseAuth()  // Custom hook for auth
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [predictions, setPredictions] = useState<Record<string, string>>({})
-  const [clientTimestamp, setClientTimestamp] = useState('')
-  const [userName, setUserName] = useState('')
-  const [showNameInput, setShowNameInput] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [existingVote, setExistingVote] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [showAuthOptions, setShowAuthOptions] = useState(true)
+  const [showNameInput, setShowNameInput] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
-    loadCandidates()
-  }, [])
+    if (user) {
+      loadProfileAndVote()
+    } else {
+      setLoading(false)
+    }
+  }, [user])
 
-  async function loadCandidates() {
-    const { data, error } = await supabase
+  async function loadProfileAndVote() {
+    // Load profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+
+    if (profile && profile.full_name) {
+      setFullName(profile.full_name)
+      loadCandidatesAndVote()
+    } else {
+      setShowNameInput(true)
+    }
+  }
+
+  async function loadCandidatesAndVote() {
+    const { data: candidatesData } = await supabase
       .from('candidates')
       .select('id, name, display_order')
       .eq('is_active', true)
       .order('display_order')
 
-    if (data) {
-      setCandidates(data)
+    if (candidatesData) {
+      setCandidates(candidatesData)
       const initialPredictions: Record<string, string> = {}
-      data.forEach(c => initialPredictions[c.name] = '')
+      candidatesData.forEach(c => initialPredictions[c.name] = '')
       setPredictions(initialPredictions)
+
+      // Load existing vote
+      const { data: voteData } = await supabase
+        .from('votes')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (voteData) {
+        setExistingVote(voteData)
+        const loadedPredictions: Record<string, string> = {}
+        candidatesData.forEach(c => {
+          loadedPredictions[c.name] = voteData.predictions[c.name]?.toString() || ''
+        })
+        setPredictions(loadedPredictions)
+      }
     }
     setLoading(false)
+    setShowAuthOptions(false)
+  }
+
+  async function saveFullName() {
+    if (!fullName.trim()) {
+      alert('נא להזין שם מלא')
+      return
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName })
+      .eq('id', user.id)
+
+    if (!error) {
+      setShowNameInput(false)
+      loadCandidatesAndVote()
+    }
   }
 
   function handlePredictionChange(candidateName: string, value: string) {
@@ -63,16 +120,6 @@ export default function VotingPage() {
       return
     }
 
-    setClientTimestamp(new Date().toISOString())
-    setShowNameInput(true)
-  }
-
-  async function submitVote() {
-    if (!userName.trim()) {
-      alert('נא להזין שם מלא')
-      return
-    }
-
     setSubmitting(true)
 
     // Convert predictions to numbers
@@ -81,13 +128,28 @@ export default function VotingPage() {
       numericPredictions[name] = parseFloat(value)
     })
 
-    const { error } = await supabase
-      .from('votes')
-      .insert({
-        user_name: userName,
-        predictions: numericPredictions,
-        client_timestamp: clientTimestamp
-      })
+    const clientTimestamp = new Date().toISOString()
+
+    let error
+    if (existingVote) {
+      // Update existing vote
+      ({ error } = await supabase
+        .from('votes')
+        .update({
+          predictions: numericPredictions,
+          client_timestamp: clientTimestamp
+        })
+        .eq('id', existingVote.id))
+    } else {
+      // Insert new vote
+      ({ error } = await supabase
+        .from('votes')
+        .insert({
+          user_id: user.id,
+          predictions: numericPredictions,
+          client_timestamp: clientTimestamp
+        }))
+    }
 
     setSubmitting(false)
 
@@ -95,15 +157,9 @@ export default function VotingPage() {
       alert('שגיאה בשמירת ההצבעה')
       console.error(error)
     } else {
-      alert('ההצבעה נשמרה בהצלחה!')
-      // Reset form
-      setPredictions(prev => {
-        const reset: Record<string, string> = {}
-        candidates.forEach(c => reset[c.name] = '')
-        return reset
-      })
-      setUserName('')
-      setShowNameInput(false)
+      alert(existingVote ? 'ההצבעה עודכנה בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
+      // Reload vote
+      loadCandidatesAndVote()
     }
   }
 
@@ -111,6 +167,36 @@ export default function VotingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
         <div className="text-xl">טוען...</div>
+      </div>
+    )
+  }
+
+  if (showAuthOptions) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+          <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
+            התחבר כדי להצביע
+          </h2>
+          <button
+            onClick={signInWithGoogle}
+            className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 mb-4"
+          >
+            התחבר עם Google
+          </button>
+          <button
+            onClick={() => signInWithEmail(prompt('הזן דוא"ל'))}  // Simple prompt for demo; improve in production
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 mb-4"
+          >
+            התחבר עם דוא"ל
+          </button>
+          <button
+            onClick={() => signInWithPhone(prompt('הזן מספר טלפון'))}  // Simple prompt for demo
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700"
+          >
+            התחבר עם טלפון
+          </button>
+        </div>
       </div>
     )
   }
@@ -124,28 +210,17 @@ export default function VotingPage() {
           </h2>
           <input
             type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
             className="w-full px-4 py-3 border-2 border-purple-200 rounded-lg focus:outline-none focus:border-purple-500 mb-6 text-center text-lg"
             placeholder="שם מלא"
-            disabled={submitting}
           />
-          <div className="flex gap-3">
-            <button
-              onClick={submitVote}
-              disabled={submitting}
-              className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 transition"
-            >
-              {submitting ? 'שולח...' : 'שלח הצבעה'}
-            </button>
-            <button
-              onClick={() => setShowNameInput(false)}
-              disabled={submitting}
-              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition"
-            >
-              חזור
-            </button>
-          </div>
+          <button
+            onClick={saveFullName}
+            className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700"
+          >
+            המשך
+          </button>
         </div>
       </div>
     )
@@ -158,8 +233,11 @@ export default function VotingPage() {
           <h1 className="text-4xl font-bold text-center mb-2 text-gray-800">
             ניחושי מדד הפוטריות
           </h1>
-          <p className="text-center text-gray-600 mb-8">
+          <p className="text-center text-gray-600 mb-4">
             נחש את הציון שכל מועמד ייתן (1-10.5)
+          </p>
+          <p className="text-center text-gray-600 mb-8">
+            שלום, {fullName} | <button onClick={signOut} className="text-blue-600">התנתק</button>
           </p>
 
           <div className="space-y-4 mb-8">
@@ -182,9 +260,10 @@ export default function VotingPage() {
 
           <button
             onClick={handleSubmit}
-            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 transition shadow-lg"
+            disabled={submitting}
+            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 transition shadow-lg disabled:bg-gray-400"
           >
-            שלח
+            {submitting ? 'שולח...' : (existingVote ? 'עדכן הצבעה' : 'שלח')}
           </button>
         </div>
       </div>
