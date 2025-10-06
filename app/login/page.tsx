@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -23,6 +24,17 @@ export default function LoginPage() {
   async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser()
     setUser(user)
+
+    if (user) {
+      // Check if user is admin from database
+      const { data: userData } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single()
+
+      setIsAdmin(userData?.is_admin || false)
+    }
   }
 
   async function handleLogin() {
@@ -77,16 +89,32 @@ export default function LoginPage() {
       }
     }
 
-    // Check admin code
+    // Check admin code and set in database
     if (adminCode) {
-      const secretCode = process.env.NEXT_PUBLIC_ADMIN_SECRET_CODE || 'POTTER2025'
-      if (adminCode === secretCode) {
-        localStorage.setItem('is_admin', 'true')
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Call API route to set admin status (uses service role)
+        const response = await fetch('/api/set-admin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            adminCode,
+            userId: user.id
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          setError(data.error === 'Invalid admin code' ? 'קוד מנהל שגוי' : 'שגיאה בהגדרת מנהל')
+          setLoading(false)
+          return
+        }
+        
         router.push('/admin')
-        return
-      } else {
-        setError('קוד מנהל שגוי')
-        setLoading(false)
         return
       }
     }
@@ -96,7 +124,6 @@ export default function LoginPage() {
 
   async function handleLogout() {
     await signOut()
-    localStorage.removeItem('is_admin')
     setUser(null)
     router.push('/')
   }
@@ -121,7 +148,7 @@ export default function LoginPage() {
               לדף הראשי
             </button>
 
-            {localStorage.getItem('is_admin') === 'true' && (
+            {isAdmin && (
               <button
                 onClick={() => router.push('/admin')}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"

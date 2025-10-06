@@ -38,11 +38,41 @@ export default function AdminPage() {
   const [winner, setWinner] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showVotes, setShowVotes] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const supabase = createClient()
 
   useEffect(() => {
-    loadData()
+    checkAdminAccess()
   }, [])
+
+  async function checkAdminAccess() {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      setCheckingAuth(false)
+      return
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single()
+
+    setIsAdmin(userData?.is_admin || false)
+    setCheckingAuth(false)
+
+    if (userData?.is_admin) {
+      loadData()
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadData()
+    }
+  }, [isAdmin])
 
   async function loadData() {
     // Load candidates
@@ -219,6 +249,31 @@ export default function AdminPage() {
     }
 
     setWinner('לא נמצא ניחוש מדויק')
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-xl">בודק הרשאות...</div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <h1 className="text-3xl font-bold mb-4 text-red-600">אין הרשאת גישה</h1>
+          <p className="text-gray-600 mb-6">רק מנהלים יכולים לגשת לדף זה</p>
+          <a
+            href="/login?code=POTTER2025"
+            className="inline-block bg-blue-600 text-white py-2 px-6 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            התחבר כמנהל
+          </a>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {

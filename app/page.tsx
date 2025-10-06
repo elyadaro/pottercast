@@ -32,7 +32,6 @@ export default function VotingPage() {
 
   async function handleLogout() {
     await signOut()
-    localStorage.removeItem('is_admin')
     setUser(null)
     setExistingVote(null)
     setIsEditMode(false)
