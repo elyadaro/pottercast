@@ -7,6 +7,16 @@ export default function TestPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
+  const checkEnvVars = () => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    setResult(`
+      URL: ${url ? 'מוגדר ✓' : 'חסר ✗'}
+      KEY: ${key ? 'מוגדר ✓' : 'חסר ✗'}
+      URL value: ${url || 'N/A'}
+    `)
+  }
+
   const testDatabase = async () => {
     try {
       setLoading(true)
@@ -37,6 +47,22 @@ export default function TestPage() {
       <p>Current time: {new Date().toLocaleString('he-IL')}</p>
 
       <hr style={{ margin: '20px 0' }} />
+
+      <button
+        onClick={checkEnvVars}
+        style={{
+          padding: '10px 20px',
+          fontSize: '16px',
+          cursor: 'pointer',
+          backgroundColor: '#2196F3',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          marginLeft: '10px'
+        }}
+      >
+        בדוק Environment Variables
+      </button>
 
       <button
         onClick={testDatabase}
