@@ -170,19 +170,19 @@ export default function VotingPage() {
       await submitVote(currentUser.id)
     }
   }
-
-  try {
-    if (loading) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-          <div className="text-xl">טוען...</div>
-        </div>
-      )
-    }
-
+  
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4">
-        <div className="max-w-2xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+        <div className="text-xl">טוען...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <h1 className="text-4xl font-bold text-center mb-2 text-gray-800">
               ניחושי מדד הפוטריות
@@ -247,34 +247,6 @@ export default function VotingPage() {
             showAlreadyVotedOption={!user}
           />
         )}
-      </div>
-    )
-  } catch (err) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">שגיאת רינדור</h1>
-          <div className="bg-red-100 border border-red-400 text-red-700 p-4 rounded-lg">
-            <p className="font-bold mb-2">פרטי השגיאה:</p>
-            <pre className="text-sm whitespace-pre-wrap break-words">
-              {err instanceof Error ? err.message : String(err)}
-            </pre>
-            {err instanceof Error && err.stack && (
-              <details className="mt-4">
-                <summary className="cursor-pointer font-bold">Stack Trace</summary>
-                <pre className="text-xs mt-2 whitespace-pre-wrap break-words">
-                  {err.stack}
-                </pre>
-              </details>
-            )}
-          </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700"
-          >
-            טען מחדש את העמוד
-          </button>
-        </div>
       </div>
     )
   }
