@@ -22,7 +22,7 @@ export default function VotingPage() {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
       בדיקה
     </div>
-  );
+  )
   const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [predictions, setPredictions] = useState<Record<string, string>>({})
