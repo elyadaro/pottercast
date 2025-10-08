@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
+import Script from 'next/script'
 
 export const metadata: Metadata = {
   title: 'פוטרקאסט - ניחושים',
@@ -13,7 +14,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="he" dir="rtl">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script
+          src="//cdn.jsdelivr.net/npm/eruda"
+          strategy="beforeInteractive"
+          onLoad={() => {
+            if (typeof window !== 'undefined' && (window as any).eruda) {
+              (window as any).eruda.init();
+            }
+          }}
+        />
+      </body>
     </html>
   )
 }
