@@ -195,7 +195,7 @@ export default function VotingPage() {
               <div className="text-center mb-4">
                 <div className="flex justify-center items-center gap-3">
                   <span className="text-sm text-gray-500">
-                    מחובר כ: {user.email}
+                    מחובר כ: {user?.email}
                   </span>
                   <button
                     onClick={handleLogout}
@@ -213,7 +213,7 @@ export default function VotingPage() {
             )}
 
             <div className="space-y-4 mb-8">
-              {candidates.map((candidate) => (
+              {candidates?.map((candidate) => (
                 <div key={candidate.id} className="flex items-center gap-4">
                   <label className="w-24 text-lg font-semibold text-gray-700">
                     {candidate.name}
