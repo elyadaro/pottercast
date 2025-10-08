@@ -11,9 +11,12 @@ export default function TestPage() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     setResult(`
-      URL: ${url ? 'מוגדר ✓' : 'חסר ✗'}
-      KEY: ${key ? 'מוגדר ✓' : 'חסר ✗'}
-      URL value: ${url || 'N/A'}
+URL: ${url ? 'מוגדר ✓' : 'חסר ✗'}
+KEY: ${key ? 'מוגדר ✓' : 'חסר ✗'}
+URL type: ${typeof url}
+KEY type: ${typeof key}
+URL value: ${url || 'undefined/null'}
+KEY first 20 chars: ${key ? key.substring(0, 20) + '...' : 'undefined/null'}
     `)
   }
 
