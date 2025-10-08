@@ -1,6 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import Script from 'next/script'
+import MobileDebugger from '@/components/MobileDebugger'
 
 export const metadata: Metadata = {
   title: 'פוטרקאסט - ניחושים',
@@ -16,15 +16,7 @@ export default function RootLayout({
     <html lang="he" dir="rtl">
       <body>
         {children}
-        <Script
-          src="//cdn.jsdelivr.net/npm/eruda"
-          strategy="beforeInteractive"
-          onLoad={() => {
-            if (typeof window !== 'undefined' && (window as any).eruda) {
-              (window as any).eruda.init();
-            }
-          }}
-        />
+        <MobileDebugger />
       </body>
     </html>
   )
