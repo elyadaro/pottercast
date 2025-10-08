@@ -42,7 +42,8 @@ export async function createUserProfile(
   userId: string,
   firstName: string,
   lastName: string,
-  phone?: string
+  phone?: string,
+  isAdmin?: boolean
 ) {
   const supabase = createClient()
 
@@ -52,7 +53,8 @@ export async function createUserProfile(
       id: userId,
       first_name: firstName,
       last_name: lastName,
-      phone: phone || null
+      phone: phone || null,
+      is_admin: isAdmin || false
     })
 
   if (error) {

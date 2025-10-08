@@ -74,46 +74,36 @@ function LoginPageContent() {
         return
       }
 
-      // Create user profile with basic info
+      // Check admin code before creating profile
+      const secretCode = 'POTTER2025'
+      const isValidAdmin = adminCode === secretCode
+
+      if (adminCode && !isValidAdmin) {
+        setError('קוד מנהל שגוי')
+        setLoading(false)
+        return
+      }
+
+      // Create user profile with admin status if code is valid
       const { error: profileError } = await supabase
         .from('users')
         .insert({
           id: data.user.id,
           first_name: email.split('@')[0],
           last_name: '',
-          phone: null
+          phone: null,
+          is_admin: isValidAdmin
         })
 
       if (profileError) {
         console.error('Error creating profile:', profileError)
+        setError('שגיאה ביצירת פרופיל')
+        setLoading(false)
+        return
       }
-    }
 
-    // Check admin code and set in database
-    if (adminCode) {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        // Call API route to set admin status (uses service role)
-        const response = await fetch('/api/set-admin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            adminCode,
-            userId: user.id
-          })
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          setError(data.error === 'Invalid admin code' ? 'קוד מנהל שגוי' : 'שגיאה בהגדרת מנהל')
-          setLoading(false)
-          return
-        }
-        
+      // If admin, redirect to admin page
+      if (isValidAdmin) {
         router.push('/admin')
         return
       }
