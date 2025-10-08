@@ -9,9 +9,10 @@ type AuthModalProps = {
   onCancel: () => void
   showAlreadyVotedOption?: boolean
   loginOnly?: boolean
+  adminCode?: string
 }
 
-export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption, loginOnly }: AuthModalProps) {
+export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption, loginOnly, adminCode }: AuthModalProps) {
   const [mode, setMode] = useState<'choice' | 'email' | 'phone' | 'login'>(loginOnly ? 'login' : 'choice')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -54,8 +55,12 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
     }
 
     if (data.user) {
+      // Check if admin code is valid
+      const secretCode = 'POTTER2025'
+      const isValidAdmin = adminCode === secretCode
+
       // Create user profile
-      await createUserProfile(data.user.id, firstName, lastName)
+      await createUserProfile(data.user.id, firstName, lastName, undefined, isValidAdmin)
       onSuccess()
     }
   }
@@ -93,7 +98,11 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
     }
 
     if (data.user) {
-      await createUserProfile(data.user.id, firstName, lastName, phone)
+      // Check if admin code is valid
+      const secretCode = 'POTTER2025'
+      const isValidAdmin = adminCode === secretCode
+
+      await createUserProfile(data.user.id, firstName, lastName, phone, isValidAdmin)
       onSuccess()
     }
   }

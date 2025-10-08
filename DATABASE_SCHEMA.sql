@@ -9,6 +9,7 @@ CREATE TABLE users (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   phone TEXT,
+  is_admin BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -82,23 +83,30 @@ ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE results ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
-CREATE POLICY "Users can view own profile"
+-- 1. Users can view their own profile (including is_admin field)
+CREATE POLICY "users_select_own"
   ON users FOR SELECT
   USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert own profile"
+-- 2. Users can insert their own profile when signing up
+-- They can set is_admin during signup (controlled in the app with admin code)
+CREATE POLICY "users_insert_own"
   ON users FOR INSERT
   WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile"
+-- 3. Users can update their own profile but cannot change is_admin after creation
+CREATE POLICY "users_update_own"
   ON users FOR UPDATE
   USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK (
+    auth.uid() = id AND
+    is_admin = (SELECT is_admin FROM users WHERE id = auth.uid())
+  );
 
--- Public read access for candidates
+-- Public read access for candidates (including anonymous users)
 CREATE POLICY "Anyone can view active candidates"
   ON candidates FOR SELECT
-  USING (is_active = true);
+  USING (true);
 
 -- Votes policies
 CREATE POLICY "Users can view own vote"
@@ -119,22 +127,52 @@ CREATE POLICY "Anyone can view results"
   ON results FOR SELECT
   USING (true);
 
--- Admin policies (you'll need to set up admin role in Supabase dashboard)
--- For now, allowing all operations via service role
-CREATE POLICY "Admin can view all votes"
-  ON votes FOR SELECT
-  USING (true);
-
-CREATE POLICY "Admin can view all users"
+-- Admin policies (check is_admin field in users table)
+-- 4. Admins can view all users (for admin dashboard)
+CREATE POLICY "admins_select_all_users"
   ON users FOR SELECT
-  USING (true);
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  );
 
-CREATE POLICY "Admin can manage candidates"
+CREATE POLICY "admins_select_all_votes"
+  ON votes FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  );
+
+CREATE POLICY "admins_manage_candidates"
   ON candidates FOR ALL
-  USING (true)
-  WITH CHECK (true);
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  );
 
-CREATE POLICY "Admin can manage results"
+CREATE POLICY "admins_manage_results"
   ON results FOR ALL
-  USING (true)
-  WITH CHECK (true);
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND is_admin = true
+    )
+  );
