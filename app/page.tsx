@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase'
 import { getCurrentUser, getUserVote, signOut } from '@/lib/auth'
 import AuthModal from '@/components/AuthModal'
 
+// Force dynamic rendering on client
+export const dynamic = 'force-dynamic'
+
 type Candidate = {
   id: string
   name: string

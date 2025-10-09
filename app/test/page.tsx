@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { SUPABASE_CONFIG } from '@/lib/supabase-config'
 
 export default function TestPage() {
   const [result, setResult] = useState<string>('')
@@ -10,7 +11,11 @@ export default function TestPage() {
   const checkEnvVars = () => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const configUrl = SUPABASE_CONFIG.url
+    const configKey = SUPABASE_CONFIG.anonKey
+
     setResult(`
+ENV VARS:
 URL: ${url ? 'מוגדר ✓' : 'חסר ✗'}
 KEY: ${key ? 'מוגדר ✓' : 'חסר ✗'}
 URL type: ${typeof url}
@@ -19,6 +24,15 @@ URL value: ${url || 'undefined/null'}
 URL length: ${url?.length || 0}
 URL has quotes: ${url?.startsWith('"') ? 'YES!' : 'no'}
 KEY first 20 chars: ${key ? key.substring(0, 20) + '...' : 'undefined/null'}
+
+RUNTIME CONFIG (supabase-config.ts):
+Config URL: ${configUrl}
+Config URL length: ${configUrl.length}
+Config Key (first 20): ${configKey.substring(0, 20)}...
+
+FINAL CLIENT:
+Client will use URL: ${configUrl}
+Match expected? ${configUrl === 'https://kfhqutyerebbwjxgtqem.supabase.co' ? 'YES ✓' : 'NO ✗'}
     `)
   }
 
