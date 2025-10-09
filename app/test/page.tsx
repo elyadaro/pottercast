@@ -16,6 +16,8 @@ KEY: ${key ? 'מוגדר ✓' : 'חסר ✗'}
 URL type: ${typeof url}
 KEY type: ${typeof key}
 URL value: ${url || 'undefined/null'}
+URL length: ${url?.length || 0}
+URL has quotes: ${url?.startsWith('"') ? 'YES!' : 'no'}
 KEY first 20 chars: ${key ? key.substring(0, 20) + '...' : 'undefined/null'}
     `)
   }
