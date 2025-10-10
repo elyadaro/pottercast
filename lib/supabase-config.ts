@@ -33,6 +33,6 @@ const getSupabaseAnonKey = (): string => {
 };
 
 export const SUPABASE_CONFIG = {
-  url: getSupabaseUrl(),
+  url: 'https://kfhqutyerebbwjxgtqem.supabase.co',
   anonKey: getSupabaseAnonKey(),
 };
