@@ -22,7 +22,7 @@ URL type: ${typeof url}
 KEY type: ${typeof key}
 URL value: ${String(url) || 'undefined/null'}
 URL length: ${url?.length || 0}
-URL start: ${url?.substring(0, 13) ? url?.substring(0, 13) || 'can not substring'}
+URL start: ${url?.substring(0, 13) || 'can not substring'}
 KEY first 20 chars: ${key ? key.substring(0, 20) + '...' : 'undefined/null'}
 
 RUNTIME CONFIG (supabase-config.ts):
