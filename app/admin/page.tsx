@@ -163,28 +163,35 @@ export default function AdminPage() {
   }
 
   async function loadAllVotes() {
-    // Load all votes with user details
-    const { data: votesData, error } = await supabase
+    // Load all votes
+    const { data: votesData, error: votesError } = await supabase
       .from('votes')
-      .select(`
-        *,
-        users:user_id (
-          first_name,
-          last_name,
-          phone
-        )
-      `)
+      .select('*')
       .order('client_timestamp', { ascending: true })
 
-    if (error) {
-      console.error('Error loading votes:', error)
+    if (votesError) {
+      console.error('Error loading votes:', votesError)
       return
     }
 
     if (votesData) {
-      // We need to get emails separately from auth.users
-      // For now, we'll store the votes and handle emails client-side
-      setVotes(votesData as any)
+      // Load user details for each vote
+      const votesWithUsers = await Promise.all(
+        votesData.map(async (vote) => {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('first_name, last_name, phone')
+            .eq('id', vote.user_id)
+            .single()
+
+          return {
+            ...vote,
+            user: userData
+          }
+        })
+      )
+
+      setVotes(votesWithUsers)
       setShowVotes(true)
     }
   }
@@ -208,17 +215,10 @@ export default function AdminPage() {
       }
     })
 
-    // Get all votes ordered by client_timestamp with user details
+    // Get all votes ordered by client_timestamp
     const { data: votesData } = await supabase
       .from('votes')
-      .select(`
-        *,
-        users:user_id (
-          first_name,
-          last_name,
-          phone
-        )
-      `)
+      .select('*')
       .order('client_timestamp', { ascending: true })
 
     if (!votesData || votesData.length === 0) {
@@ -227,7 +227,7 @@ export default function AdminPage() {
     }
 
     // Find first exact match
-    for (const vote of votesData as any[]) {
+    for (const vote of votesData) {
       let isExactMatch = true
 
       for (const [candidateName, actualScore] of Object.entries(targetPredictions)) {
@@ -238,10 +238,17 @@ export default function AdminPage() {
       }
 
       if (isExactMatch) {
-        const userName = vote.users
-          ? `${vote.users.first_name} ${vote.users.last_name}`
+        // Load user details for the winner
+        const { data: userData } = await supabase
+          .from('users')
+          .select('first_name, last_name, phone')
+          .eq('id', vote.user_id)
+          .single()
+
+        const userName = userData
+          ? `${userData.first_name} ${userData.last_name}`
           : 'משתמש לא ידוע'
-        const contactInfo = vote.users?.phone || vote.users?.email || 'אין מידע'
+        const contactInfo = userData?.phone || 'אין מידע'
         const timestamp = new Date(vote.client_timestamp).toLocaleString('he-IL')
         setWinner(`🏆 הזוכה: ${userName}\nפרטי קשר: ${contactInfo}\nזמן הצבעה: ${timestamp}`)
         return
