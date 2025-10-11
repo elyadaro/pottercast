@@ -1,5 +1,3 @@
-import { createClient } from './supabase'
-
 export type UserProfile = {
   id: string
   first_name: string
@@ -9,32 +7,28 @@ export type UserProfile = {
 }
 
 export async function getCurrentUser() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+  try {
+    const response = await fetch('/api/auth/user')
+    if (!response.ok) return null
+
+    const data = await response.json()
+    return data.user
+  } catch (error) {
+    console.error('Error getting current user:', error)
+    return null
+  }
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  const supabase = createClient()
+  try {
+    const response = await fetch(`/api/auth/profile?userId=${userId}`)
+    if (!response.ok) return null
 
-  // Get auth user for email
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Get profile data
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  if (error || !data) return null
-
-  return {
-    id: data.id,
-    first_name: data.first_name,
-    last_name: data.last_name,
-    phone: data.phone,
-    email: user?.email || null
+    const data = await response.json()
+    return data.profile
+  } catch (error) {
+    console.error('Error getting user profile:', error)
+    return null
   }
 }
 
@@ -45,40 +39,46 @@ export async function createUserProfile(
   phone?: string,
   isAdmin?: boolean
 ) {
-  const supabase = createClient()
-
-  const { error } = await supabase
-    .from('users')
-    .insert({
-      id: userId,
-      first_name: firstName,
-      last_name: lastName,
-      phone: phone || null,
-      is_admin: isAdmin || false
+  try {
+    const response = await fetch('/api/auth/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        firstName,
+        lastName,
+        phone,
+        isAdmin
+      })
     })
 
-  if (error) {
+    if (!response.ok) return false
+
+    const data = await response.json()
+    return data.success
+  } catch (error) {
     console.error('Error creating user profile:', error)
     return false
   }
-
-  return true
 }
 
 export async function getUserVote(userId: string) {
-  const supabase = createClient()
+  try {
+    const response = await fetch(`/api/votes?userId=${userId}`)
+    if (!response.ok) return null
 
-  const { data, error } = await supabase
-    .from('votes')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error) return null
-  return data
+    const data = await response.json()
+    return data.vote
+  } catch (error) {
+    console.error('Error getting user vote:', error)
+    return null
+  }
 }
 
 export async function signOut() {
-  const supabase = createClient()
-  await supabase.auth.signOut()
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } catch (error) {
+    console.error('Error signing out:', error)
+  }
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import { getCurrentUser, getUserVote, signOut } from '@/lib/auth'
 import AuthModal from '@/components/AuthModal'
 
@@ -31,7 +30,6 @@ export default function VotingPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
-  const supabase = createClient()
 
   async function handleLogout() {
     await signOut()
@@ -51,16 +49,13 @@ export default function VotingPage() {
     setUser(currentUser)
 
     // Load candidates
-    const { data: candidatesData } = await supabase
-      .from('candidates')
-      .select('id, name, display_order')
-      .eq('is_active', true)
-      .order('display_order')
+    const response = await fetch('/api/candidates')
+    const { candidates: candidatesData } = await response.json()
 
     if (candidatesData) {
       setCandidates(candidatesData)
       const initialPredictions: Record<string, string> = {}
-      candidatesData.forEach(c => initialPredictions[c.name] = '')
+      candidatesData.forEach((c: Candidate) => initialPredictions[c.name] = '')
 
       // If user is logged in, check for existing vote
       if (currentUser) {
@@ -124,33 +119,34 @@ export default function VotingPage() {
     })
 
     const voteData = {
-      user_id: userId,
+      userId,
       predictions: numericPredictions,
-      client_timestamp: clientTimestamp || new Date().toISOString()
+      clientTimestamp: clientTimestamp || new Date().toISOString()
     }
 
-    let error
+    let response
 
     if (isEditMode && existingVote) {
       // Update existing vote
-      const result = await supabase
-        .from('votes')
-        .update(voteData)
-        .eq('user_id', userId)
-      error = result.error
+      response = await fetch('/api/votes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(voteData)
+      })
     } else {
       // Insert new vote
-      const result = await supabase
-        .from('votes')
-        .insert(voteData)
-      error = result.error
+      response = await fetch('/api/votes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(voteData)
+      })
     }
 
     setSubmitting(false)
 
-    if (error) {
+    if (!response.ok) {
       alert('שגיאה בשמירת ההצבעה')
-      console.error(error)
+      console.error('Vote submission failed')
     } else {
       alert(isEditMode ? 'הניחוש עודכן בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
       // Reload to get updated vote

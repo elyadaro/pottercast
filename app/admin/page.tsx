@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 
 type Candidate = {
   id: string
@@ -26,9 +25,6 @@ type Vote = {
     last_name: string
     phone: string | null
   }
-  auth_user?: {
-    email: string | null
-  }
 }
 
 export default function AdminPage() {
@@ -40,30 +36,19 @@ export default function AdminPage() {
   const [showVotes, setShowVotes] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     checkAdminAccess()
   }, [])
 
   async function checkAdminAccess() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const response = await fetch('/api/admin/check')
+    const { isAdmin: adminStatus } = await response.json()
 
-    if (!user) {
-      setCheckingAuth(false)
-      return
-    }
-
-    const { data: userData } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
-
-    setIsAdmin(userData?.is_admin || false)
+    setIsAdmin(adminStatus)
     setCheckingAuth(false)
 
-    if (userData?.is_admin) {
+    if (adminStatus) {
       loadData()
     }
   }
@@ -76,25 +61,22 @@ export default function AdminPage() {
 
   async function loadData() {
     // Load candidates
-    const { data: candidatesData } = await supabase
-      .from('candidates')
-      .select('*')
-      .order('display_order')
+    const candidatesResponse = await fetch('/api/admin/candidates')
+    const { candidates: candidatesData } = await candidatesResponse.json()
 
     if (candidatesData) {
       setCandidates(candidatesData)
 
       // Initialize results
       const initialResults: Record<string, string> = {}
-      candidatesData.forEach(c => initialResults[c.name] = '')
+      candidatesData.forEach((c: Candidate) => initialResults[c.name] = '')
 
       // Load existing results
-      const { data: resultsData } = await supabase
-        .from('results')
-        .select('*')
+      const resultsResponse = await fetch('/api/admin/results')
+      const { results: resultsData } = await resultsResponse.json()
 
       if (resultsData) {
-        resultsData.forEach(r => {
+        resultsData.forEach((r: Result) => {
           initialResults[r.candidate_name] = r.actual_score?.toString() || ''
         })
       }
@@ -106,12 +88,16 @@ export default function AdminPage() {
   }
 
   async function toggleCandidate(candidateId: string, currentActive: boolean) {
-    const { error } = await supabase
-      .from('candidates')
-      .update({ is_active: !currentActive })
-      .eq('id', candidateId)
+    const response = await fetch('/api/admin/candidates', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidateId,
+        isActive: !currentActive
+      })
+    })
 
-    if (!error) {
+    if (response.ok) {
       setCandidates(prev =>
         prev.map(c => c.id === candidateId ? { ...c, is_active: !currentActive } : c)
       )
@@ -139,123 +125,50 @@ export default function AdminPage() {
       return
     }
 
-    // Save to database (upsert)
-    for (const candidate of activeCandidates) {
-      const score = parseFloat(results[candidate.name])
+    // Prepare results data
+    const resultsToSave = activeCandidates.map(candidate => ({
+      candidate_name: candidate.name,
+      actual_score: parseFloat(results[candidate.name])
+    }))
 
-      const { error } = await supabase
-        .from('results')
-        .upsert({
-          candidate_name: candidate.name,
-          actual_score: score,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'candidate_name'
-        })
+    const response = await fetch('/api/admin/results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results: resultsToSave })
+    })
 
-      if (error) {
-        alert(`שגיאה בשמירת תוצאה עבור ${candidate.name}`)
-        return
-      }
+    if (response.ok) {
+      alert('התוצאות נשמרו בהצלחה!')
+    } else {
+      alert('שגיאה בשמירת התוצאות')
     }
-
-    alert('התוצאות נשמרו בהצלחה!')
   }
 
   async function loadAllVotes() {
-    // Load all votes
-    const { data: votesData, error: votesError } = await supabase
-      .from('votes')
-      .select('*')
-      .order('client_timestamp', { ascending: true })
-
-    if (votesError) {
-      console.error('Error loading votes:', votesError)
-      return
-    }
+    const response = await fetch('/api/admin/votes')
+    const { votes: votesData } = await response.json()
 
     if (votesData) {
-      // Load user details for each vote
-      const votesWithUsers = await Promise.all(
-        votesData.map(async (vote) => {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('first_name, last_name, phone')
-            .eq('id', vote.user_id)
-            .single()
-
-          return {
-            ...vote,
-            user: userData
-          }
-        })
-      )
-
-      setVotes(votesWithUsers)
+      setVotes(votesData)
       setShowVotes(true)
     }
   }
 
   async function findWinner() {
-    // Get all results
-    const { data: resultsData } = await supabase
-      .from('results')
-      .select('*')
+    const response = await fetch('/api/admin/winner')
+    const data = await response.json()
 
-    if (!resultsData || resultsData.length === 0) {
-      alert('לא נשמרו תוצאות עדיין')
+    if (data.error) {
+      alert(data.error === 'No results found' ? 'לא נשמרו תוצאות עדיין' : 'אין הצבעות במערכת')
       return
     }
 
-    // Create target predictions object
-    const targetPredictions: Record<string, number> = {}
-    resultsData.forEach(r => {
-      if (r.actual_score !== null) {
-        targetPredictions[r.candidate_name] = r.actual_score
-      }
-    })
-
-    // Get all votes ordered by client_timestamp
-    const { data: votesData } = await supabase
-      .from('votes')
-      .select('*')
-      .order('client_timestamp', { ascending: true })
-
-    if (!votesData || votesData.length === 0) {
-      alert('אין הצבעות במערכת')
-      return
+    if (data.winner) {
+      const { name, contact, timestamp } = data.winner
+      setWinner(`🏆 הזוכה: ${name}\nפרטי קשר: ${contact}\nזמן הצבעה: ${timestamp}`)
+    } else {
+      setWinner('לא נמצא ניחוש מדויק')
     }
-
-    // Find first exact match
-    for (const vote of votesData) {
-      let isExactMatch = true
-
-      for (const [candidateName, actualScore] of Object.entries(targetPredictions)) {
-        if (vote.predictions[candidateName] !== actualScore) {
-          isExactMatch = false
-          break
-        }
-      }
-
-      if (isExactMatch) {
-        // Load user details for the winner
-        const { data: userData } = await supabase
-          .from('users')
-          .select('first_name, last_name, phone')
-          .eq('id', vote.user_id)
-          .single()
-
-        const userName = userData
-          ? `${userData.first_name} ${userData.last_name}`
-          : 'משתמש לא ידוע'
-        const contactInfo = userData?.phone || 'אין מידע'
-        const timestamp = new Date(vote.client_timestamp).toLocaleString('he-IL')
-        setWinner(`🏆 הזוכה: ${userName}\nפרטי קשר: ${contactInfo}\nזמן הצבעה: ${timestamp}`)
-        return
-      }
-    }
-
-    setWinner('לא נמצא ניחוש מדויק')
   }
 
   if (checkingAuth) {
@@ -371,7 +284,7 @@ export default function AdminPage() {
         </div>
 
         {/* View All Votes */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 mt-8">
           <h2 className="text-2xl font-bold mb-4 text-gray-700">כל ההצבעות</h2>
           <button
             onClick={loadAllVotes}

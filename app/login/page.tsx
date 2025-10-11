@@ -2,8 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import { signOut } from '@/lib/auth'
+import { getCurrentUser, signOut } from '@/lib/auth'
 
 function LoginPageContent() {
   const router = useRouter()
@@ -15,25 +14,20 @@ function LoginPageContent() {
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
   const [isAdmin, setIsAdmin] = useState(false)
-  const supabase = createClient()
 
   useEffect(() => {
     checkUser()
   }, [])
 
   async function checkUser() {
-    const { data: { user } } = await supabase.auth.getUser()
-    setUser(user)
+    const currentUser = await getCurrentUser()
+    setUser(currentUser)
 
-    if (user) {
+    if (currentUser) {
       // Check if user is admin from database
-      const { data: userData } = await supabase
-        .from('users')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single()
-
-      setIsAdmin(userData?.is_admin || false)
+      const response = await fetch('/api/admin/check')
+      const { isAdmin: adminStatus } = await response.json()
+      setIsAdmin(adminStatus)
     }
   }
 
@@ -47,63 +41,38 @@ function LoginPageContent() {
     setError('')
 
     // Try to sign in first
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const signInResponse = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
     })
 
+    const signInData = await signInResponse.json()
+
     // If sign in failed, try to create new user
-    if (signInError) {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: undefined,
-        }
+    if (!signInResponse.ok || signInData.error) {
+      const signUpResponse = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          firstName: email.split('@')[0],
+          lastName: '',
+          adminCode
+        })
       })
 
-      if (signUpError) {
-        setError('שגיאה ביצירת המשתמש: ' + signUpError.message)
-        setLoading(false)
-        return
-      }
+      const signUpData = await signUpResponse.json()
 
-      if (!data.user) {
-        setError('שגיאה ביצירת המשתמש')
-        setLoading(false)
-        return
-      }
-
-      // Check admin code before creating profile
-      const secretCode = 'POTTER2025'
-      const isValidAdmin = adminCode === secretCode
-
-      if (adminCode && !isValidAdmin) {
-        setError('קוד מנהל שגוי')
-        setLoading(false)
-        return
-      }
-
-      // Create user profile with admin status if code is valid
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: data.user.id,
-          first_name: email.split('@')[0],
-          last_name: '',
-          phone: null,
-          is_admin: isValidAdmin
-        })
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError)
-        setError('שגיאה ביצירת פרופיל')
+      if (!signUpResponse.ok || signUpData.error) {
+        setError('שגיאה ביצירת המשתמש: ' + (signUpData.error || 'Unknown error'))
         setLoading(false)
         return
       }
 
       // If admin, redirect to admin page
-      if (isValidAdmin) {
+      if (signUpData.isAdmin) {
         router.push('/admin')
         return
       }

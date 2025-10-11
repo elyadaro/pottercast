@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase'
-import { createUserProfile } from '@/lib/auth'
 
 type AuthModalProps = {
   onSuccess: () => void
@@ -21,7 +19,6 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const supabase = createClient()
 
   async function handleEmailSignup() {
     if (!email || !firstName || !lastName) {
@@ -32,37 +29,30 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
     setLoading(true)
     setError('')
 
-    // Simple email signup without verification
-    // We'll use a dummy password since Supabase requires one
+    // Generate dummy password
     const dummyPassword = Math.random().toString(36).slice(-16) + Math.random().toString(36).slice(-16)
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password: dummyPassword,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-        },
-        emailRedirectTo: undefined, // Disable email confirmation
-      }
+    const response = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password: dummyPassword,
+        firstName,
+        lastName,
+        adminCode
+      })
     })
 
-    if (signUpError) {
-      setError(signUpError.message)
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
+      setError(data.error || 'שגיאה בהרשמה')
       setLoading(false)
       return
     }
 
-    if (data.user) {
-      // Check if admin code is valid
-      const secretCode = 'POTTER2025'
-      const isValidAdmin = adminCode === secretCode
-
-      // Create user profile
-      await createUserProfile(data.user.id, firstName, lastName, undefined, isValidAdmin)
-      onSuccess()
-    }
+    onSuccess()
   }
 
   async function handlePhoneSignup() {
@@ -78,33 +68,28 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
     const phoneEmail = `${phone.replace(/\D/g, '')}@pottercast.local`
     const dummyPassword = Math.random().toString(36).slice(-16) + Math.random().toString(36).slice(-16)
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: phoneEmail,
-      password: dummyPassword,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          phone: phone,
-        },
-        emailRedirectTo: undefined,
-      }
+    const response = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: phoneEmail,
+        password: dummyPassword,
+        firstName,
+        lastName,
+        phone,
+        adminCode
+      })
     })
 
-    if (signUpError) {
-      setError(signUpError.message)
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
+      setError(data.error || 'שגיאה בהרשמה')
       setLoading(false)
       return
     }
 
-    if (data.user) {
-      // Check if admin code is valid
-      const secretCode = 'POTTER2025'
-      const isValidAdmin = adminCode === secretCode
-
-      await createUserProfile(data.user.id, firstName, lastName, phone, isValidAdmin)
-      onSuccess()
-    }
+    onSuccess()
   }
 
   async function handleLogin() {
@@ -116,12 +101,18 @@ export default function AuthModal({ onSuccess, onCancel, showAlreadyVotedOption,
     setLoading(true)
     setError('')
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const response = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password
+      })
     })
 
-    if (signInError) {
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
       setError('שגיאה בהתחברות. אם שכחת את הסיסמה, צור חשבון חדש.')
       setLoading(false)
       return
