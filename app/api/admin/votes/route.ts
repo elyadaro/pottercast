@@ -22,18 +22,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // שליפת כל ההצבעות עם פרטי משתמשים בשאילתה אחת (JOIN)
-    // Payload optimization: Only select needed fields
+    // שליפת כל ההצבעות (ללא JOIN - מטעמי תאימות)
+    // הסיבה: votes.user_id מצביע ל-auth.users, לא ל-public.users ישירות
+    // PostgREST לא יכול לזהות את הקשר באופן אוטומטי
     const { data: votesData, error: votesError } = await supabase
       .from('votes')
-      .select(`
-        user_id,
-        predictions,
-        client_timestamp,
-        server_timestamp,
-        updated_at,
-        users!inner(first_name, last_name, phone)
-      `)
+      .select('id, user_id, predictions, client_timestamp, server_timestamp, updated_at')
       .order('client_timestamp', { ascending: true })
 
     if (votesError) {
@@ -41,18 +35,36 @@ export async function GET() {
       return NextResponse.json({ error: votesError.message }, { status: 500 })
     }
 
-    if (!votesData) {
+    if (!votesData || votesData.length === 0) {
       return NextResponse.json({ votes: [] })
     }
 
-    // Transform data to match expected format
+    // שליפת כל פרופילי המשתמשים (public.users) בשאילתה אחת
+    const userIds = votesData.map(v => v.user_id)
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, phone')
+      .in('id', userIds)
+
+    if (usersError) {
+      console.error('Error loading users:', usersError)
+      // Continue without user data rather than failing completely
+    }
+
+    // יצירת מפה מהירה של משתמשים לפי ID
+    const usersMap = new Map(
+      (usersData || []).map(user => [user.id, user])
+    )
+
+    // איחוד הנתונים
     const votesWithUsers = votesData.map(vote => ({
+      id: vote.id,
       user_id: vote.user_id,
       predictions: vote.predictions,
       client_timestamp: vote.client_timestamp,
       server_timestamp: vote.server_timestamp,
       updated_at: vote.updated_at,
-      user: vote.users
+      user: usersMap.get(vote.user_id) || null
     }))
 
     return NextResponse.json({ votes: votesWithUsers })
