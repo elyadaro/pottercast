@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { logVoteSubmission, logError, startTimer } from '@/lib/logger'
 
 // GET - קבלת vote של משתמש
 export async function GET(request: NextRequest) {
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest) {
 
 // POST - יצירת vote חדש
 export async function POST(request: NextRequest) {
+  const timer = startTimer()
+
   try {
     const { userId, predictions, clientTimestamp } = await request.json()
 
@@ -53,18 +56,25 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Error creating vote:', error)
+      logError('Error creating vote', error, { userId })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    // Log successful vote submission
+    logVoteSubmission(userId, false)
+
+    const duration = timer.elapsed()
+    return NextResponse.json({ success: true, duration })
   } catch (error: any) {
+    logError('Unexpected error in POST /api/votes', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
 // PUT - עדכון vote קיים
 export async function PUT(request: NextRequest) {
+  const timer = startTimer()
+
   try {
     const { userId, predictions, clientTimestamp } = await request.json()
 
@@ -86,12 +96,17 @@ export async function PUT(request: NextRequest) {
       .eq('user_id', userId)
 
     if (error) {
-      console.error('Error updating vote:', error)
+      logError('Error updating vote', error, { userId })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    // Log successful vote edit
+    logVoteSubmission(userId, true)
+
+    const duration = timer.elapsed()
+    return NextResponse.json({ success: true, duration })
   } catch (error: any) {
+    logError('Unexpected error in PUT /api/votes', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

@@ -5,17 +5,13 @@ export function createClient() {
   const supabaseUrl = SUPABASE_CONFIG.url
   const supabaseKey = SUPABASE_CONFIG.anonKey
 
-  console.log('Creating Supabase client with:', {
-    url: supabaseUrl,
-    keyExists: !!supabaseKey,
-    urlType: typeof supabaseUrl,
-    keyType: typeof supabaseKey,
-    urlLength: supabaseUrl?.length || 0,
-    keyLength: supabaseKey?.length || 0,
-  })
+  // Only log in development
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Creating Supabase client')
+  }
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error(`Missing Supabase environment variables. URL: ${supabaseUrl}, Key length: ${supabaseKey?.length}`)
+    throw new Error('Missing Supabase environment variables')
   }
 
   return createBrowserClient(

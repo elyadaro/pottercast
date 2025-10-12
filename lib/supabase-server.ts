@@ -4,8 +4,12 @@ import { cookies } from 'next/headers'
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies()
 
+  // Use Supabase Pooler URL for better connection management
+  // This prevents connection exhaustion under high load (300 concurrent users)
+  const supabaseUrl = process.env.SUPABASE_POOLER_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
@@ -21,6 +25,13 @@ export async function createServerSupabaseClient() {
             // Server component, ignore
           }
         },
+      },
+      db: {
+        schema: 'public',
+      },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
       },
     }
   )

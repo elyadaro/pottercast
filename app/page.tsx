@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, getUserVote, signOut } from '@/lib/auth'
 import AuthModal from '@/components/AuthModal'
+import {
+  retryWithBackoff,
+  parseError,
+  saveToLocalStorage,
+  loadFromLocalStorage,
+  clearFromLocalStorage,
+} from '@/lib/error-handler'
 
 // Force dynamic rendering on client
 export const dynamic = 'force-dynamic'
@@ -30,6 +37,7 @@ export default function VotingPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleLogout() {
     await signOut()
@@ -44,39 +52,65 @@ export default function VotingPage() {
   }, [])
 
   async function loadData() {
-    // Check if user is logged in
-    const currentUser = await getCurrentUser()
-    setUser(currentUser)
+    try {
+      setError(null)
 
-    // Load candidates
-    const response = await fetch('/api/candidates')
-    const { candidates: candidatesData } = await response.json()
+      // Use retry logic with exponential backoff for resilience
+      const data = await retryWithBackoff(async () => {
+        const response = await fetch('/api/init')
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw { status: response.status, message: errorData.error }
+        }
+        return response.json()
+      })
 
-    if (candidatesData) {
-      setCandidates(candidatesData)
-      const initialPredictions: Record<string, string> = {}
-      candidatesData.forEach((c: Candidate) => initialPredictions[c.name] = '')
+      const { user: currentUser, candidates: candidatesData, vote } = data
 
-      // If user is logged in, check for existing vote
-      if (currentUser) {
-        const vote = await getUserVote(currentUser.id)
+      setUser(currentUser)
+
+      if (candidatesData) {
+        setCandidates(candidatesData)
+        const initialPredictions: Record<string, string> = {}
+        candidatesData.forEach((c: Candidate) => (initialPredictions[c.name] = ''))
+
+        // If user has existing vote, load it
         if (vote) {
           setExistingVote(vote)
           setIsEditMode(true)
           // Load existing predictions
-          Object.entries(vote.predictions as Record<string, number>).forEach(([name, value]) => {
-            initialPredictions[name] = value.toString()
-          })
+          Object.entries(vote.predictions as Record<string, number>).forEach(
+            ([name, value]) => {
+              initialPredictions[name] = value.toString()
+            }
+          )
         }
-      }
 
-      setPredictions(initialPredictions)
+        setPredictions(initialPredictions)
+      }
+    } catch (err: any) {
+      const appError = parseError(err)
+      setError(appError.userMessage)
+
+      // Try to load from localStorage backup
+      const backup = loadFromLocalStorage<Record<string, string>>('predictions_backup')
+      if (backup) {
+        setPredictions(backup)
+        setError(
+          appError.userMessage + ' (נטענו הנתונים השמורים מהמחשב שלך)'
+        )
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function handlePredictionChange(candidateName: string, value: string) {
-    setPredictions(prev => ({ ...prev, [candidateName]: value }))
+    const newPredictions = { ...predictions, [candidateName]: value }
+    setPredictions(newPredictions)
+
+    // Auto-save to localStorage as backup
+    saveToLocalStorage('predictions_backup', newPredictions)
   }
 
   async function handleSubmit() {
@@ -182,6 +216,26 @@ export default function VotingPage() {
           <p className="text-center text-gray-600 mb-4">
             נחש את הציון שכל מועמד ייתן (1-10.5)
           </p>
+
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <span className="text-red-600 text-xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-red-800 text-sm">{error}</p>
+                  <button
+                    onClick={() => {
+                      setError(null)
+                      loadData()
+                    }}
+                    className="mt-2 text-red-600 hover:text-red-700 text-sm underline"
+                  >
+                    נסה שוב
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {user && (
             <div className="text-center mb-4">
