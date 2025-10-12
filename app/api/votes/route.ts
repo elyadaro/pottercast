@@ -14,9 +14,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createServerSupabaseClient()
 
+    // Payload optimization: Only return fields needed by client
     const { data, error } = await supabase
       .from('votes')
-      .select('*')
+      .select('user_id, predictions, client_timestamp, server_timestamp, updated_at')
       .eq('user_id', userId)
       .single()
 

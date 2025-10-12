@@ -22,10 +22,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // שליפת כל ההצבעות
+    // שליפת כל ההצבעות עם פרטי משתמשים בשאילתה אחת (JOIN)
+    // Payload optimization: Only select needed fields
     const { data: votesData, error: votesError } = await supabase
       .from('votes')
-      .select('*')
+      .select(`
+        user_id,
+        predictions,
+        client_timestamp,
+        server_timestamp,
+        updated_at,
+        users!inner(first_name, last_name, phone)
+      `)
       .order('client_timestamp', { ascending: true })
 
     if (votesError) {
@@ -37,21 +45,15 @@ export async function GET() {
       return NextResponse.json({ votes: [] })
     }
 
-    // שליפת פרטי משתמשים עבור כל הצבעה
-    const votesWithUsers = await Promise.all(
-      votesData.map(async (vote) => {
-        const { data: userProfile } = await supabase
-          .from('users')
-          .select('first_name, last_name, phone')
-          .eq('id', vote.user_id)
-          .single()
-
-        return {
-          ...vote,
-          user: userProfile
-        }
-      })
-    )
+    // Transform data to match expected format
+    const votesWithUsers = votesData.map(vote => ({
+      user_id: vote.user_id,
+      predictions: vote.predictions,
+      client_timestamp: vote.client_timestamp,
+      server_timestamp: vote.server_timestamp,
+      updated_at: vote.updated_at,
+      user: vote.users
+    }))
 
     return NextResponse.json({ votes: votesWithUsers })
   } catch (error: any) {

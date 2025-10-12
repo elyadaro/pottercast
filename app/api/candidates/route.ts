@@ -39,6 +39,5 @@ export async function GET() {
   }
 }
 
-// Enable Edge Runtime for better caching
-export const runtime = 'edge'
-export const dynamic = 'force-static'
+// Note: Edge runtime removed due to incompatibility with force-static
+// Caching is still enabled via Cache-Control headers

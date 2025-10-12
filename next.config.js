@@ -8,7 +8,7 @@ const nextConfig = {
   // Enable production optimizations for 300 concurrent users
   compress: true, // Enable gzip compression
   poweredByHeader: false, // Remove X-Powered-By header for security
-  swcMinify: true, // Use SWC for faster minification
+  // Note: swcMinify is enabled by default in Next.js 15+
 
   // Disable static optimization for pages with env var issues
   generateBuildId: async () => {

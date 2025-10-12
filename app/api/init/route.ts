@@ -36,11 +36,12 @@ export async function GET() {
     }
 
     // If user is logged in, try to fetch their existing vote
+    // Only select fields needed by the client for payload optimization
     let vote = null
     if (user && !userError) {
       const { data: voteData } = await supabase
         .from('votes')
-        .select('*')
+        .select('user_id, predictions, client_timestamp, server_timestamp, updated_at')
         .eq('user_id', user.id)
         .single()
 

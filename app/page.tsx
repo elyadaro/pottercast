@@ -55,7 +55,26 @@ export default function VotingPage() {
     try {
       setError(null)
 
-      // Use retry logic with exponential backoff for resilience
+      // Try to load candidates from cache first (huge performance win for 300 concurrent users)
+      const cachedCandidates = loadFromLocalStorage<{
+        data: Candidate[]
+        timestamp: number
+      }>('candidates_cache')
+
+      const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+      const now = Date.now()
+      const isCacheValid = cachedCandidates && (now - cachedCandidates.timestamp < CACHE_TTL)
+
+      // If cache is valid, load candidates immediately (instant load!)
+      if (isCacheValid && cachedCandidates.data.length > 0) {
+        setCandidates(cachedCandidates.data)
+        const initialPredictions: Record<string, string> = {}
+        cachedCandidates.data.forEach((c: Candidate) => (initialPredictions[c.name] = ''))
+        setPredictions(initialPredictions)
+        setLoading(false)
+      }
+
+      // Always fetch fresh data in background (for user/vote info)
       const data = await retryWithBackoff(async () => {
         const response = await fetch('/api/init')
         if (!response.ok) {
@@ -69,8 +88,21 @@ export default function VotingPage() {
 
       setUser(currentUser)
 
+      // Update cache if we got fresh candidates data
+      if (candidatesData && candidatesData.length > 0) {
+        saveToLocalStorage('candidates_cache', {
+          data: candidatesData,
+          timestamp: now
+        })
+        // Update candidates state if different from cache
+        if (!isCacheValid) {
+          // Only update if cache wasn't used (to avoid re-render)
+          setCandidates(candidatesData)
+        }
+      }
+
+      // Handle vote data (always update since it's user-specific)
       if (candidatesData) {
-        setCandidates(candidatesData)
         const initialPredictions: Record<string, string> = {}
         candidatesData.forEach((c: Candidate) => (initialPredictions[c.name] = ''))
 
@@ -86,7 +118,10 @@ export default function VotingPage() {
           )
         }
 
-        setPredictions(initialPredictions)
+        // Only update predictions if cache wasn't used or if we have vote data
+        if (!isCacheValid || vote) {
+          setPredictions(initialPredictions)
+        }
       }
     } catch (err: any) {
       const appError = parseError(err)
@@ -158,33 +193,52 @@ export default function VotingPage() {
       clientTimestamp: clientTimestamp || new Date().toISOString()
     }
 
-    let response
+    // Optimistic UI: Show success immediately for better UX
+    // This makes the app feel instant even if network is slow
+    const successMessage = isEditMode ? 'הניחוש עודכן בהצלחה! ✓' : 'ההצבעה נשמרה בהצלחה! ✓'
 
-    if (isEditMode && existingVote) {
-      // Update existing vote
-      response = await fetch('/api/votes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(voteData)
-      })
-    } else {
-      // Insert new vote
-      response = await fetch('/api/votes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(voteData)
-      })
-    }
+    // Save to localStorage as backup immediately
+    saveToLocalStorage('last_vote_backup', voteData)
 
-    setSubmitting(false)
+    try {
+      let response
 
-    if (!response.ok) {
-      alert('שגיאה בשמירת ההצבעה')
-      console.error('Vote submission failed')
-    } else {
-      alert(isEditMode ? 'הניחוש עודכן בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
-      // Reload to get updated vote
-      await loadData()
+      if (isEditMode && existingVote) {
+        // Update existing vote
+        response = await fetch('/api/votes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(voteData)
+        })
+      } else {
+        // Insert new vote
+        response = await fetch('/api/votes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(voteData)
+        })
+      }
+
+      if (!response.ok) {
+        // Rollback: Show error
+        throw new Error('Failed to save vote')
+      }
+
+      // Success! Show confirmation
+      alert(successMessage)
+      setIsEditMode(true) // Enable edit mode after successful submission
+
+      // Clear backup since it was successful
+      clearFromLocalStorage('last_vote_backup')
+      clearFromLocalStorage('predictions_backup')
+
+      // Reload to get updated vote (in background, non-blocking)
+      loadData()
+    } catch (error) {
+      alert('שגיאה בשמירת ההצבעה. הנתונים נשמרו במחשב שלך - נסה שוב מאוחר יותר.')
+      console.error('Vote submission failed:', error)
+    } finally {
+      setSubmitting(false)
     }
   }
 
