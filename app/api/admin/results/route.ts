@@ -66,22 +66,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // שמירת כל התוצאות
-    for (const result of results) {
-      const { error } = await supabase
-        .from('results')
-        .upsert({
-          candidate_name: result.candidate_name,
-          actual_score: result.actual_score,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'candidate_name'
-        })
+    // שמירת כל התוצאות (כולל null עבור מועמדים לא פעילים או ריקים)
+    // upsert מאפשר לעדכן גם ערכים ל-null
+    const resultsToUpsert = results.map((result: any) => ({
+      candidate_name: result.candidate_name,
+      actual_score: result.actual_score, // יכול להיות null
+      updated_at: new Date().toISOString()
+    }))
 
-      if (error) {
-        console.error(`Error saving result for ${result.candidate_name}:`, error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
+    const { error } = await supabase
+      .from('results')
+      .upsert(resultsToUpsert, {
+        onConflict: 'candidate_name'
+      })
+
+    if (error) {
+      console.error('Error saving results:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

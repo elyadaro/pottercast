@@ -11,6 +11,13 @@ import {
   loadFromLocalStorage,
   clearFromLocalStorage,
 } from '@/lib/error-handler'
+import {
+  addVoteToQueue,
+  subscribeToQueueUpdates,
+  getQueueStatus,
+  type QueueStatusEvent,
+  type QueueStatus,
+} from '@/lib/vote-queue'
 
 // Force dynamic rendering on client
 export const dynamic = 'force-dynamic'
@@ -39,6 +46,10 @@ export default function VotingPage() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Queue system state
+  const [queueStatus, setQueueStatus] = useState<QueueStatusEvent | null>(null)
+  const [currentQueueId, setCurrentQueueId] = useState<string | null>(null)
+
   async function handleLogout() {
     await signOut()
     setUser(null)
@@ -49,6 +60,24 @@ export default function VotingPage() {
 
   useEffect(() => {
     loadData()
+
+    // Subscribe to queue updates
+    const unsubscribe = subscribeToQueueUpdates((event) => {
+      setQueueStatus(event)
+
+      // If vote succeeded, reload data and clear queue state
+      if (event.status === 'success') {
+        setTimeout(() => {
+          setQueueStatus(null)
+          setCurrentQueueId(null)
+          loadData()
+        }, 2000) // Show success message for 2 seconds
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
   }, [])
 
   async function loadData() {
@@ -187,58 +216,36 @@ export default function VotingPage() {
       numericPredictions[name] = parseFloat(value)
     })
 
-    const voteData = {
-      userId,
-      predictions: numericPredictions,
-      clientTimestamp: clientTimestamp || new Date().toISOString()
-    }
-
-    // Optimistic UI: Show success immediately for better UX
-    // This makes the app feel instant even if network is slow
-    const successMessage = isEditMode ? 'הניחוש עודכן בהצלחה! ✓' : 'ההצבעה נשמרה בהצלחה! ✓'
+    const timestamp = clientTimestamp || new Date().toISOString()
 
     // Save to localStorage as backup immediately
-    saveToLocalStorage('last_vote_backup', voteData)
+    saveToLocalStorage('last_vote_backup', {
+      userId,
+      predictions: numericPredictions,
+      clientTimestamp: timestamp
+    })
 
     try {
-      let response
+      // Add to queue instead of direct submission
+      const queueId = addVoteToQueue(
+        userId,
+        numericPredictions,
+        timestamp,
+        isEditMode
+      )
 
-      if (isEditMode && existingVote) {
-        // Update existing vote
-        response = await fetch('/api/votes', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(voteData)
-        })
-      } else {
-        // Insert new vote
-        response = await fetch('/api/votes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(voteData)
-        })
-      }
-
-      if (!response.ok) {
-        // Rollback: Show error
-        throw new Error('Failed to save vote')
-      }
-
-      // Success! Show confirmation
-      alert(successMessage)
-      setIsEditMode(true) // Enable edit mode after successful submission
-
-      // Clear backup since it was successful
-      clearFromLocalStorage('last_vote_backup')
-      clearFromLocalStorage('predictions_backup')
-
-      // Reload to get updated vote (in background, non-blocking)
-      loadData()
-    } catch (error) {
-      alert('שגיאה בשמירת ההצבעה. הנתונים נשמרו במחשב שלך - נסה שוב מאוחר יותר.')
-      console.error('Vote submission failed:', error)
-    } finally {
+      setCurrentQueueId(queueId)
       setSubmitting(false)
+
+      // Show initial queue status
+      const initialStatus = getQueueStatus(queueId)
+      if (initialStatus) {
+        setQueueStatus(initialStatus)
+      }
+    } catch (error) {
+      setSubmitting(false)
+      alert('שגיאה בהוספה לתור. הנתונים נשמרו במחשב שלך - נסה שוב מאוחר יותר.')
+      console.error('Failed to add to queue:', error)
     }
   }
 
@@ -286,6 +293,76 @@ export default function VotingPage() {
                   >
                     נסה שוב
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Queue Status Display */}
+          {queueStatus && (
+            <div className={`mb-4 p-4 rounded-lg border-2 ${
+              queueStatus.status === 'success'
+                ? 'bg-green-50 border-green-300'
+                : queueStatus.status === 'failed'
+                ? 'bg-red-50 border-red-300'
+                : queueStatus.status === 'sending'
+                ? 'bg-blue-50 border-blue-300'
+                : 'bg-yellow-50 border-yellow-300'
+            }`}>
+              <div className="flex items-start gap-3">
+                {/* Animated icon based on status */}
+                <span className={`text-2xl ${
+                  queueStatus.status === 'success' ? '' :
+                  queueStatus.status === 'sending' ? 'animate-pulse' :
+                  queueStatus.status === 'retrying' ? 'animate-bounce' : ''
+                }`}>
+                  {queueStatus.status === 'success' && '✅'}
+                  {queueStatus.status === 'failed' && '❌'}
+                  {queueStatus.status === 'sending' && '📤'}
+                  {(queueStatus.status === 'pending' || queueStatus.status === 'retrying') && '⏳'}
+                </span>
+
+                <div className="flex-1">
+                  {/* Main message */}
+                  <p className={`font-semibold mb-1 ${
+                    queueStatus.status === 'success' ? 'text-green-800' :
+                    queueStatus.status === 'failed' ? 'text-red-800' :
+                    queueStatus.status === 'sending' ? 'text-blue-800' :
+                    'text-yellow-800'
+                  }`}>
+                    {queueStatus.message}
+                  </p>
+
+                  {/* Progress indicator */}
+                  {queueStatus.status !== 'success' && queueStatus.status !== 'failed' && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>ניסיון {queueStatus.attempts}/{queueStatus.maxAttempts}</span>
+                        {queueStatus.totalInQueue && queueStatus.totalInQueue > 1 && (
+                          <span>{queueStatus.totalInQueue} משתמשים בתור</span>
+                        )}
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${
+                            queueStatus.status === 'sending' ? 'bg-blue-500 animate-pulse' :
+                            queueStatus.status === 'retrying' ? 'bg-yellow-500' :
+                            'bg-purple-500'
+                          }`}
+                          style={{
+                            width: `${(queueStatus.attempts / queueStatus.maxAttempts) * 100}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Additional info for retrying state */}
+                  {queueStatus.status === 'retrying' && queueStatus.attempts >= 3 && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      💡 אתה יכול לסגור את הדף - המערכת תמשיך לנסות ברקע
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

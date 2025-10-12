@@ -24,13 +24,6 @@ CREATE INDEX IF NOT EXISTS idx_candidates_active
 ON candidates(is_active, display_order)
 WHERE is_active = true;
 
--- Index for users by email (already exists via auth, but ensuring it's there)
--- Used in: Authentication flow
--- Benefit: Fast user lookups during login/signup
-CREATE INDEX IF NOT EXISTS idx_users_email
-ON users(email)
-WHERE email IS NOT NULL;
-
 -- Index for admin users
 -- Used in: Admin dashboard queries
 -- Benefit: Fast filtering of admin operations

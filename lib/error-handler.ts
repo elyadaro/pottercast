@@ -11,6 +11,8 @@ export type ErrorType =
   | 'validation'
   | 'rate_limit'
   | 'server'
+  | 'timeout'
+  | 'queue_full'
   | 'unknown'
 
 export type AppError = {
@@ -35,14 +37,25 @@ export function parseError(error: any): AppError {
     }
   }
 
+  // Timeout errors
+  if (error.name === 'AbortError' || error.message?.includes('timeout') || error.code === 'ETIMEDOUT') {
+    return {
+      type: 'timeout',
+      message: error.message || 'Request timeout',
+      userMessage: 'הבקשה ארכה יותר מדי זמן. השרת כנראה עמוס - מנסה שוב...',
+      retryable: true,
+      retryAfter: 5,
+    }
+  }
+
   // Rate limit errors (429)
   if (error.status === 429 || error.message?.includes('rate limit')) {
     return {
       type: 'rate_limit',
       message: error.message || 'Rate limit exceeded',
-      userMessage: 'יותר מדי בקשות. אנא המתן מספר שניות ונסה שוב.',
+      userMessage: 'השרת עמוס מאוד כרגע. ההצבעה שלך נשמרה והמערכת ממשיכה לנסות ברקע.',
       retryable: true,
-      retryAfter: error.retryAfter || 60,
+      retryAfter: error.retryAfter || 30,
     }
   }
 

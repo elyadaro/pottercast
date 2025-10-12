@@ -47,7 +47,7 @@ The database uses Supabase PostgreSQL with Row Level Security (RLS):
 - `users` - User profiles (extends `auth.users` with first_name, last_name, phone)
 - `candidates` - Candidates available for voting (with is_active flag)
 - `votes` - One vote per user containing predictions JSON, client_timestamp (when submit clicked), and server_timestamp
-- `results` - Actual scores set by admins
+- `results` - Actual scores set by admins (actual_score can be NULL for inactive/empty candidates)
 
 **Vote editing**: The `update_votes_updated_at` trigger automatically updates `updated_at` when votes are modified.
 
@@ -100,8 +100,9 @@ app/api/
 
 Located at `/admin`:
 - Toggle candidate active status
-- Enter actual results
-- Find first accurate prediction (compares all votes against results)
+- Enter actual results (fields can be left empty - will be saved as NULL)
+- Inactive candidates automatically get NULL results
+- Find first accurate prediction (compares all votes against non-NULL results)
 - View all votes with user contact information
 
 ## File Structure
@@ -126,10 +127,12 @@ lib/
    rate-limit.ts      # Rate limiting utilities
    error-handler.ts   # Error handling with retry logic
    logger.ts          # Monitoring and logging
+   vote-queue.ts      # Client-side queue system for vote submissions
 
 middleware.ts                # Session refresh + rate limiting
 DATABASE_SCHEMA.sql          # Complete database schema with RLS
 FIX_RLS_POLICIES.sql         # RLS policy fixes for infinite recursion
+ALLOW_NULL_RESULTS.sql       # Migration to allow NULL in results table
 PERFORMANCE_INDEXES.sql      # Performance indexes for 300 users
 OPTIMIZATION_GUIDE.md        # Complete optimization guide
 DEPLOYMENT_CHECKLIST.md      # Pre-deployment checklist
@@ -140,6 +143,25 @@ DEPLOYMENT_CHECKLIST.md      # Pre-deployment checklist
 ### Vote Timestamp Handling
 
 The `client_timestamp` is set **before** the auth modal appears (in `handleSubmit`) to preserve the exact moment the user clicked submit. This is critical for determining the winner.
+
+### Queue System for High Load
+
+To handle 300 concurrent users submitting votes simultaneously, the app implements a sophisticated queue system:
+
+**Implementation** (`lib/vote-queue.ts`):
+- **Client-side Queue**: Manages vote submissions with intelligent retry logic
+- **Persistent Storage**: Queue survives page refresh (stored in localStorage)
+- **Exponential Backoff**: Retry delays increase progressively (1s → 2s → 5s → 10s → 30s)
+- **Concurrent Management**: Limits to 3 parallel requests to avoid overwhelming the server
+- **Real-time Feedback**: Event-driven status updates with Hebrew messages
+- **Background Processing**: Queue continues working even if user closes the tab
+
+**User Experience during high load:**
+1. Timestamp is captured immediately (before any delays)
+2. User sees friendly message: "כולם שולחים עכשיו! הרגע המדויק שלך נשמר..."
+3. System automatically retries in background with visual progress indicator
+4. No data loss - everything is backed up in localStorage
+5. User can close the page - queue continues processing on next visit
 
 ### Phone Authentication Workaround
 
@@ -187,6 +209,10 @@ Run the following SQL files **in order** in Supabase SQL Editor:
    - Drops old policies that caused infinite recursion
    - Creates `is_admin()` security definer function
    - Recreates all RLS policies correctly
+
+3. **`ALLOW_NULL_RESULTS.sql`** - (Run if upgrading existing database):
+   - Updates CHECK constraint to allow NULL values in results.actual_score
+   - Enables admins to clear results for inactive candidates
 
 ### RLS Infinite Recursion Issue
 

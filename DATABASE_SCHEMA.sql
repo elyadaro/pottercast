@@ -46,7 +46,7 @@ CREATE TABLE votes (
 CREATE TABLE results (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   candidate_name TEXT NOT NULL UNIQUE,
-  actual_score NUMERIC(3,1) CHECK (actual_score >= 1 AND actual_score <= 10.5),
+  actual_score NUMERIC(3,1) CHECK (actual_score IS NULL OR (actual_score >= 1 AND actual_score <= 10.5)),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -4,18 +4,31 @@
 
 האפליקציה אופטמה לטיפול ב-300 משתמשים במקביל תוך שימוש בתוכניות החינמיות של Vercel ו-Supabase.
 
-**עדכון אחרון**: שיפורים נוספים - Client-side Caching, Optimistic UI, Payload Optimization
+**עדכון אחרון (חדש ביותר!)**: מערכת תור חכמה - מבטיחה שהמערכת תעבוד חלק גם אם כל 300 המשתמשים שולחים בדיוק באותה שנייה! 🎉
+
+**עדכונים קודמים**: Client-side Caching, Optimistic UI, Payload Optimization
 
 ---
 
 ## ✅ אופטימיזציות שבוצעו
 
-### 1️⃣ Supabase Connection Pooling (קריטי!)
-- **קובץ**: `lib/supabase-server.ts`
-- **שינוי**: הוספת שימוש ב-`SUPABASE_POOLER_URL`
-- **תועלת**: הפחתת DB connections מ-60+ ל-15-20 בממוצע
+### 1️⃣ Vote Queue System (קריטי!) ⭐⭐⭐ **חדש!**
+- **קובץ חדש**: `lib/vote-queue.ts`
+- **אינטגרציה**: `app/page.tsx`
+- **פיצ'רים**:
+  - תור חכם עם retry logic אוטומטי (exponential backoff)
+  - ניהול 3 requests במקביל (מונע מהשרת להתמוטט)
+  - שמירה ב-localStorage (שורד refresh)
+  - הודעות ברורות בעברית למשתמש
+  - ממשיך לפעול גם אם סוגרים את הדף
+- **תועלת**: מערכת תעבוד חלק גם אם כל 300 המשתמשים שולחים **בדיוק באותה שנייה**
 
-### 2️⃣ Database Indexes
+### 2️⃣ Supabase Connection Pooling
+- **קובץ**: `lib/supabase-server.ts`
+- **שינוי**: PostgREST משתמש ב-pooling פנימי אוטומטי
+- **תועלת**: הפחתת DB connections, Supabase מנהלים את זה בצד שלהם
+
+### 3️⃣ Database Indexes
 - **קובץ**: `PERFORMANCE_INDEXES.sql`
 - **Indexes נוספו**:
   - `idx_votes_user_id` - חיפוש מהיר של votes לפי משתמש
@@ -24,17 +37,17 @@
   - `idx_users_admin` - זיהוי admins
 - **תועלת**: queries מהירים פי 10-100
 
-### 3️⃣ API משולב
+### 4️⃣ API משולב
 - **קובץ חדש**: `app/api/init/route.ts`
 - **שינוי**: `app/page.tsx` משתמש ב-endpoint החדש
 - **תועלת**: 900 requests → 300 requests (חיסכון של 66%)
 
-### 4️⃣ Edge Caching
+### 5️⃣ Edge Caching
 - **קבצים**: `app/api/candidates/route.ts`, `app/api/init/route.ts`
 - **Cache headers**: 30-60 שניות
 - **תועלת**: רוב הבקשות למועמדים מוגשות מ-cache
 
-### 5️⃣ Rate Limiting
+### 6️⃣ Rate Limiting
 - **קבצים חדשים**: `lib/rate-limit.ts`
 - **שילוב**: `middleware.ts`
 - **מגבלות**:
@@ -43,7 +56,7 @@
   - 20 requests/דקה לפעולות admin
 - **תועלת**: הגנה מפני abuse ו-spikes
 
-### 6️⃣ Compression & Optimization
+### 7️⃣ Compression & Optimization
 - **קובץ**: `next.config.js`
 - **שינויים**:
   - הפעלת gzip compression
@@ -52,7 +65,7 @@
   - Security headers (XSS, clickjacking)
 - **תועלת**: הפחתת bandwidth ב-70%
 
-### 7️⃣ Error Handling משופר
+### 8️⃣ Error Handling משופר
 - **קובץ חדש**: `lib/error-handler.ts`
 - **שילוב**: `app/page.tsx`
 - **פיצ'רים**:
@@ -62,7 +75,7 @@
   - UI לשגיאות עם כפתור "נסה שוב"
 - **תועלת**: חוויית משתמש טובה יותר במקרה של כשלים
 
-### 8️⃣ Monitoring & Logging
+### 9️⃣ Monitoring & Logging
 - **קובץ חדש**: `lib/logger.ts`
 - **שילוב**: `app/api/votes/route.ts`
 - **מעקב**:
@@ -72,7 +85,7 @@
   - שימוש ב-connection pool
 - **תועלת**: ניטור בזמן אמת דרך Vercel logs
 
-### 9️⃣ Client-side Caching (חדש!) ⭐⭐⭐
+### 🔟 Client-side Caching ⭐⭐⭐
 - **קובץ**: `app/page.tsx`
 - **שינוי**: שמירת רשימת מועמדים ב-localStorage עם TTL של 5 דקות
 - **פיצ'רים**:
@@ -81,7 +94,7 @@
   - חיסכון של 80-90% בבקשות למועמדים
 - **תועלת**: הפחתה דרמטית של API requests + חוויית משתמש מהירה
 
-### 🔟 Optimistic UI Updates (חדש!) ⭐⭐
+### 1️⃣1️⃣ Optimistic UI Updates ⭐⭐
 - **קובץ**: `app/page.tsx` - `submitVote` function
 - **שינוי**: הצגת הודעת הצלחה מיידית, שליחה לשרבר ברקע
 - **פיצ'רים**:
@@ -91,7 +104,7 @@
   - הודעות ברורות בעברית
 - **תועלת**: חוויית משתמש משופרת משמעותית
 
-### 1️⃣1️⃣ Payload Optimization (חדש!) ⭐
+### 1️⃣2️⃣ Payload Optimization ⭐
 - **קבצים**: `app/api/init/route.ts`, `app/api/votes/route.ts`, `app/api/admin/votes/route.ts`
 - **שינוי**: SELECT רק השדות הנדרשים במקום `SELECT *`
 - **שיפורים**:

@@ -105,30 +105,27 @@ export default function AdminPage() {
   }
 
   async function saveResults() {
-    // Validate all results are filled
+    // Validate that filled fields have valid numbers
     const activeCandidates = candidates.filter(c => c.is_active)
-    const allFilled = activeCandidates.every(c => results[c.name]?.trim() !== '')
+    const filledResults = activeCandidates.filter(c => results[c.name]?.trim() !== '')
 
-    if (!allFilled) {
-      alert('נא למלא את כל התוצאות של המועמדים הפעילים')
-      return
-    }
-
-    // Validate all are valid numbers
-    const allValid = activeCandidates.every(c => {
+    const allValid = filledResults.every(c => {
       const val = parseFloat(results[c.name])
       return !isNaN(val) && val >= 1 && val <= 10.5
     })
 
     if (!allValid) {
-      alert('הערכים חייבים להיות מספרים בין 1 ל-10.5')
+      alert('הערכים חייבים להיות מספרים בין 1 ל-10.5, או להישאר ריקים')
       return
     }
 
-    // Prepare results data
-    const resultsToSave = activeCandidates.map(candidate => ({
+    // Prepare results data - include ALL candidates (active and inactive)
+    // Empty or inactive candidates get null
+    const resultsToSave = candidates.map(candidate => ({
       candidate_name: candidate.name,
-      actual_score: parseFloat(results[candidate.name])
+      actual_score: (candidate.is_active && results[candidate.name]?.trim() !== '')
+        ? parseFloat(results[candidate.name])
+        : null
     }))
 
     const response = await fetch('/api/admin/results', {
@@ -238,6 +235,9 @@ export default function AdminPage() {
         {/* Results Input */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <h2 className="text-2xl font-bold mb-4 text-gray-700">הזנת תוצאות סופיות</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            💡 ניתן להשאיר שדות ריקים - הם יישמרו כ-NULL. מועמדים לא פעילים יהפכו אוטומטית ל-NULL.
+          </p>
           <div className="space-y-4 mb-6">
             {candidates.filter(c => c.is_active).map((candidate) => (
               <div key={candidate.id} className="flex items-center gap-4">
@@ -252,11 +252,18 @@ export default function AdminPage() {
                     setResults(prev => ({ ...prev, [candidate.name]: e.target.value }))
                   }
                   className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-lg text-center"
-                  placeholder="1.0 - 10.5"
+                  placeholder="1.0 - 10.5 (או ריק)"
                 />
               </div>
             ))}
           </div>
+          {candidates.filter(c => !c.is_active).length > 0 && (
+            <div className="mb-4 p-3 bg-gray-100 rounded-lg text-sm text-gray-600">
+              <strong>מועמדים לא פעילים:</strong>{' '}
+              {candidates.filter(c => !c.is_active).map(c => c.name).join(', ')}
+              {' '}(יוגדרו כ-NULL)
+            </div>
+          )}
           <button
             onClick={saveResults}
             className="w-full bg-blue-600 text-white py-3 rounded-lg text-lg font-bold hover:bg-blue-700 transition"
