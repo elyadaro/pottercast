@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
+// Maximum duration for serverless function (critical for high load)
+export const maxDuration = 10
+
 // GET - קבלת vote של משתמש
 export async function GET(request: NextRequest) {
   try {

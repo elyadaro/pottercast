@@ -5,9 +5,6 @@ import { useRouter } from 'next/navigation'
 import { getCurrentUser, getUserVote, signOut } from '@/lib/auth'
 import AuthModal from '@/components/AuthModal'
 
-// Force dynamic rendering on client
-export const dynamic = 'force-dynamic'
-
 type Candidate = {
   id: string
   name: string
@@ -109,7 +106,7 @@ export default function VotingPage() {
     }
   }
 
-  async function submitVote(userId: string) {
+  async function submitVote(userId: string, retryCount = 0) {
     setSubmitting(true)
 
     // Convert predictions to numbers
@@ -124,33 +121,54 @@ export default function VotingPage() {
       clientTimestamp: clientTimestamp || new Date().toISOString()
     }
 
-    let response
+    try {
+      let response
 
-    if (isEditMode && existingVote) {
-      // Update existing vote
-      response = await fetch('/api/votes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(voteData)
-      })
-    } else {
-      // Insert new vote
-      response = await fetch('/api/votes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(voteData)
-      })
-    }
+      if (isEditMode && existingVote) {
+        // Update existing vote
+        response = await fetch('/api/votes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(voteData)
+        })
+      } else {
+        // Insert new vote
+        response = await fetch('/api/votes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(voteData)
+        })
+      }
 
-    setSubmitting(false)
+      setSubmitting(false)
 
-    if (!response.ok) {
-      alert('שגיאה בשמירת ההצבעה')
-      console.error('Vote submission failed')
-    } else {
-      alert(isEditMode ? 'הניחוש עודכן בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
-      // Reload to get updated vote
-      await loadData()
+      if (!response.ok) {
+        // Retry once on 503/504/timeout errors
+        if (retryCount === 0 && (response.status === 503 || response.status === 504)) {
+          console.log('Server busy, retrying in 1 second...')
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          return submitVote(userId, retryCount + 1)
+        }
+
+        alert('שגיאה בשמירת ההצבעה. אנא נסה שנית.')
+        console.error('Vote submission failed:', response.status)
+      } else {
+        alert(isEditMode ? 'הניחוש עודכן בהצלחה!' : 'ההצבעה נשמרה בהצלחה!')
+        // Reload to get updated vote
+        await loadData()
+      }
+    } catch (error) {
+      setSubmitting(false)
+
+      // Retry once on network errors
+      if (retryCount === 0) {
+        console.log('Network error, retrying in 1 second...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        return submitVote(userId, retryCount + 1)
+      }
+
+      alert('שגיאת רשת. אנא בדוק את החיבור לאינטרנט ונסה שנית.')
+      console.error('Vote submission error:', error)
     }
   }
 
@@ -225,9 +243,17 @@ export default function VotingPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 disabled:bg-gray-400 transition shadow-lg"
+            className="w-full bg-purple-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-lg"
           >
-            {submitting ? 'שולח...' : (isEditMode ? 'עדכן ניחוש' : 'שלח')}
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                שולח...
+              </span>
+            ) : (isEditMode ? 'עדכן ניחוש' : 'שלח')}
           </button>
         </div>
       </div>
